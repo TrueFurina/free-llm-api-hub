@@ -44,7 +44,7 @@ Step by step from an empty checkout — no VPS, no Infisical needed for the basi
 
 ```bash
 # 1. Start from the repo root and install dependencies once
-npm install
+npm ci --ignore-scripts
 
 # 2. Copy the example env and fill in the keys you have
 cp .env.example .env
@@ -75,7 +75,7 @@ To skip inference (near-zero footprint): `node scripts/probe.mjs --auth-only`.
 ## Modes & footprint
 
 ```bash
-npm run probe                     # dry run: report only, no writes
+node --env-file=.env scripts/probe.mjs      # dry run: report only, no writes
 node scripts/probe.mjs --write    # persist last_probed/probe_status/models_free + report
 node scripts/probe.mjs --auth-only   # skip inference (near-zero footprint)
 node scripts/probe.mjs --only=groq,cerebras
