@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { roundTripError } from './_serialize.mjs';
+import { ORDER, roundTripError } from './_serialize.mjs';
 import { freshnessBadge, freshnessColor, freshnessStatus, recScore, SLA_DAYS, DUE_SOON_DAYS } from './lib/rules.mjs';
 import { esc, stripTags } from './lib/escape.mjs';
 import { mineProviderHistory, assertHistoryPlausible } from './lib/history.mjs';
@@ -31,6 +31,17 @@ const exitOk = (args) => {
 
 test('serializer round-trips data/providers.json byte-exactly', () => {
   assert.equal(roundTripError(readFileSync(DATA, 'utf8')), null);
+});
+
+test('serializer ORDER matches the JSON Schema provider properties', () => {
+  const schema = JSON.parse(readFileSync(join(ROOT, 'data/schema.json'), 'utf8'));
+  const providerKeys = Object.keys(schema.$defs.provider.properties);
+
+  assert.deepEqual(
+    [...ORDER].sort(),
+    providerKeys.sort(),
+    'serializer ORDER and provider schema properties must stay in sync',
+  );
 });
 
 test('validate passes on the real dataset', () => {
