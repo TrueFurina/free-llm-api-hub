@@ -1,7 +1,7 @@
 {
   "$schema": "./schema.json",
   "version": "2.9.0",
-  "generated": "2026-10-02",
+  "generated": "2026-10-08",
   "source": "https://github.com/pacocartones/free-llm-api-hub",
   "note": "Canonical dataset. README tables, badge-freshness.json and the interactive site are all generated from this file — do not hand-edit them. `verified: true` means the core facts (tier, limits, key catch, link) were independently confirmed against the provider's own docs on `last_verified`. `verified: false` means sourced from community tracking and not yet independently re-confirmed here — treat those as indicative. Attribute fields (openai_compatible, modalities, best_for) are progressively backfilled and may be null.",
   "providers": [
@@ -11,7 +11,7 @@
       "category": "ongoing",
       "free_type": "renewing-quota",
       "free_tier": "Gemini 2.5 Flash, 2.5 Flash-Lite, 2.5 Pro (limited), embeddings, TTS models",
-      "rate_limits": "Varies by model: 5-30 RPM and 15-1,000 RPD (e.g. 2.5 Pro: 5 RPM/100 RPD; 2.5 Flash: 10/250; 2.5 Flash-Lite: 15/1,000; embeddings: 100 RPD; TTS: 15 RPD)",
+      "rate_limits": "Per-model; Google no longer publishes the free-tier numbers in its public docs — they are shown only on the AI Studio rate-limit page after sign-in",
       "notes": "Free-tier prompts/outputs may be used by Google to improve its products outside the UK/CH/EEA/EU. Since the 2026-03-23 terms, only Paid Services may serve API clients to end users in the EEA/CH/UK",
       "best_for": "The only frontier-class model with a genuine free tier",
       "modalities": ["text", "vision", "embeddings", "audio"],
@@ -25,19 +25,19 @@
       "openai_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
       "env_key": "GEMINI_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-02"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "groq",
       "name": "Groq",
       "category": "ongoing",
       "free_type": "renewing-quota",
-      "free_tier": "Open-weight models (Llama, Qwen, GPT-OSS) plus Whisper, no credit card required",
-      "rate_limits": "e.g. llama-3.1-8b-instant: 30 RPM/14.4K RPD/6K TPM/500K TPD; llama-3.3-70b-versatile: 30 RPM/1K RPD/12K TPM/100K TPD; qwen/qwen3.6-27b: 30 RPM/1K RPD/8K TPM/200K TPD; similar for GPT-OSS and Whisper models",
+      "free_tier": "Open-weight models (GPT-OSS, Qwen) plus Whisper, no credit card required",
+      "rate_limits": "Free plan examples: openai/gpt-oss-120b, openai/gpt-oss-20b and qwen/qwen3.8-27b: 30 RPM/1K RPD/8K TPM/200K TPD; Whisper models: 20 RPM/2K RPD/7.2K audio seconds/hour and 28.8K/day; limits vary by model",
       "notes": "Limits apply at the organization level, not per API key. Phone verification required at signup",
       "best_for": "Lowest-latency inference for open-weight models",
       "modalities": ["text", "audio"],
-      "models_free": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "whisper-large-v3-turbo", "whisper-large-v3"],
+      "models_free": ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b", "whisper-large-v3", "whisper-large-v3-turbo"],
       "expires": null,
       "docs_url": "https://console.groq.com/docs/rate-limits",
       "phone_required": true,
@@ -47,19 +47,19 @@
       "openai_base_url": "https://api.groq.com/openai/v1",
       "env_key": "GROQ_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-02"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "openrouter",
       "name": "OpenRouter",
       "category": "ongoing",
       "free_type": "renewing-quota",
-      "free_tier": "A rotating set of models with a :free suffix (~14 today; count fluctuates), single API across many providers",
+      "free_tier": "A rotating set of models with a :free suffix (16 on 2026-10-08; count fluctuates), single API across many providers",
       "rate_limits": "20 req/min; 50 req/day under 10 credits purchased lifetime, 1000 req/day once 10+ credits purchased (one-time, not a subscription)",
       "notes": "ToS (Jul 2026) prohibits reselling API access or building a competing service — platform-wide, not just the free models; per-model terms still apply",
       "best_for": "Widest model selection behind one no-card key",
       "modalities": ["text", "vision"],
-      "models_free": ["cohere/north-mini-code:free", "google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free", "liquid/lfm-2.5-2.6b:free", "nvidia/nemotron-3-nano-30b-a3b:free", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "openai/gpt-oss-20b:free", "poolside/laguna-s-2.1:free"],
+      "models_free": ["cohere/north-mini-code:free", "google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free", "liquid/lfm-2.5-2.6b:free", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "poolside/laguna-s-2.1:free"],
       "expires": null,
       "docs_url": "https://openrouter.ai/docs/api-reference/limits",
       "phone_required": false,
@@ -69,7 +69,7 @@
       "openai_base_url": "https://openrouter.ai/api/v1",
       "env_key": "OPENROUTER_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-02"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "cloudflare-workers-ai",
@@ -91,7 +91,7 @@
       "openai_base_url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
       "env_key": "CLOUDFLARE_API_TOKEN",
       "verified": true,
-      "last_verified": "2026-08-02"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "cohere",
@@ -121,11 +121,11 @@
       "category": "trial",
       "free_type": "trial-credit",
       "free_tier": "$5 in free credits for new accounts, usable across all public models",
-      "rate_limits": "Published Free Trial per-model limits: 5 RPM / 30,000 TPM / 1,000,000 TPH / 1,000,000 TPD (e.g. gpt-oss-120b, zai-glm-4.7, gemma-4-31b); limits vary by model",
+      "rate_limits": "Published Free Trial limits for gpt-oss-120b and qwen-3.8-27b: 5 RPM / 30,000 uncached TPM / 90,000 total TPM / 1,000,000 TPH / 1,000,000 TPD; limits vary by model",
       "notes": "A verified payment method is required to activate Playground/API access (no charge until you buy credits). Credits expire 30 days after grant; whether any free access persists past expiry is not stated",
       "best_for": "Fastest tokens/sec on wafer-scale hardware",
       "modalities": ["text"],
-      "models_free": ["gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"],
+      "models_free": ["gpt-oss-120b", "qwen-3.8-27b"],
       "expires": "30 days",
       "docs_url": "https://inference-docs.cerebras.ai/support/rate-limits",
       "phone_required": null,
@@ -135,7 +135,7 @@
       "openai_base_url": "https://api.cerebras.ai/v1",
       "env_key": "CEREBRAS_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-02"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "mistral",
@@ -252,12 +252,12 @@
       "name": "OVHcloud AI Endpoints",
       "category": "ongoing",
       "free_type": "perpetual",
-      "free_tier": "Two Qwen3Guard models (Gen-8B and Gen-0.6B) are currently listed as Free in the catalog; access is available anonymously or with an API key tied to a Public Cloud project",
+      "free_tier": "Seven models are currently listed as Free: two Qwen3Guard moderation models, Stable Diffusion XL and four NVIDIA Riva TTS voices; access is available anonymously or with an API key tied to a Public Cloud project",
       "rate_limits": "Anonymous access: 2 requests/min per IP per model. Authenticated (API key): 400 requests/min per project per model. Exceeding either returns HTTP 429",
       "notes": "European provider (France), relevant for EU data-sovereignty/GDPR-conscious use. The authenticated tier needs a valid payment method on the project (though \"Free\" models themselves don't charge); anonymous access needs neither an account nor a card. A separate general $200 Public Cloud trial voucher also exists but is unrelated to this free-model tier",
       "best_for": "EU-hosted, no-account access to open models",
-      "modalities": ["text"],
-      "models_free": null,
+      "modalities": ["text", "image", "audio"],
+      "models_free": ["Qwen3Guard-Gen-8B", "Qwen3Guard-Gen-0.6B", "stable-diffusion-xl-base-v10", "nvr-tts-de-de", "nvr-tts-es-es", "nvr-tts-it-it", "nvr-tts-en-us"],
       "expires": null,
       "docs_url": "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/",
       "phone_required": null,
@@ -267,7 +267,7 @@
       "openai_base_url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
       "env_key": "OVHCLOUD_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-03"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "fireworks-ai",
@@ -289,7 +289,7 @@
       "openai_base_url": "https://api.fireworks.ai/inference/v1",
       "env_key": "FIREWORKS_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-03"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "baseten",
@@ -311,7 +311,7 @@
       "openai_base_url": "https://inference.baseten.co/v1",
       "env_key": "BASETEN_API_KEY",
       "verified": true,
-      "last_verified": "2026-08-03"
+      "last_verified": "2026-10-08"
     },
     {
       "slug": "nebius",
