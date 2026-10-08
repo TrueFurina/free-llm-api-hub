@@ -21,12 +21,15 @@ import { githubProfileUrl } from './lib/contributors.mjs';
 import { resolveBestEntries } from './lib/best.mjs';
 import { openaiClients, litellmYaml } from './lib/client-config.mjs';
 import * as compareLib from './lib/compare.mjs';
+import { providerFigures, expandFigures, injectInlineFigures, figureErrors } from './lib/figures.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FRESH_DAYS = SLA_DAYS; // the freshness SLA, defined once in lib/rules.mjs
 
 const data = JSON.parse(readFileSync(join(ROOT, 'data/providers.json'), 'utf8'));
 const providers = data.providers;
+// Counts quoted in prose come from the data, never from a typed number (lib/figures.mjs).
+const FIGS = providerFigures(providers);
 
 // ---------- freshness ----------
 const today = new Date();
@@ -547,6 +550,8 @@ const coverageTable =
 // validate.mjs, check-best.mjs and best.test.mjs, so `npm run build` alone fails
 // on an unverified pick exactly like CI does (#165). Edit data/best.json to re-rank.
 const BEST = JSON.parse(readFileSync(join(ROOT, 'data/best.json'), 'utf8'));
+BEST.desc = expandFigures(BEST.desc, FIGS);
+BEST.intro = expandFigures(BEST.intro, FIGS);
 const bestEntries = resolveBestEntries(BEST, providers);
 // Static /compare/<a>-vs-<b>/ pages (#175): editorial picks compared pairwise
 // where they share a modality, capped (see lib/compare.mjs). Computed up front
@@ -577,6 +582,11 @@ readme = inject(readme, 'coverage', coverageTable);
 readme = inject(readme, 'collections', collectionsIndexMd);
 readme = inject(readme, 'best', bestTable(bestEntries));
 readme = inject(readme, 'contributors', contributorsMd());
+readme = injectInlineFigures(readme, FIGS);
+{
+  const stale = figureErrors(readme, FIGS, 'README.md');
+  if (stale.length) throw new Error(stale.join('\n'));
+}
 
 writeFileSync(join(ROOT, 'README.md'), readme);
 
@@ -1445,7 +1455,7 @@ const programCount = programs.startups.length + programs.research.length;
 const llmsSummary = `A continuously-verified, machine-readable dataset of free-tier and trial-credit LLM (and adjacent AI-model) APIs for developers. Every entry is dated and sourced to the provider's own docs.`;
 const llmsTxt =
   `# Free LLM API Hub\n\n> ${llmsSummary}\n\n` +
-  `${total} providers (${ongoing.length} ongoing free tiers, ${trial.length} trial credits) and ${programCount} apply-to-get credit programs. Schema v${data.version}. Terms change often — always confirm against each provider's own docs, linked from every entry. This whole site is static and machine-readable.\n\n` +
+  `${total} providers (${ongoing.length} ongoing free tiers, ${trial.length} trial credits) and ${programCount} apply-to-get credit programs. Dataset v${data.version}. Terms change often — always confirm against each provider's own docs, linked from every entry. This whole site is static and machine-readable.\n\n` +
   `## Dataset\n` +
   `- [Full dataset, JSON](${SITE}/api/v1/providers.json): every provider, all fields\n` +
   `- [JSON Schema](${REPO}/blob/main/data/schema.json)\n` +
@@ -1478,7 +1488,7 @@ const provBlock = (p) => {
 };
 const llmsFull =
   `# Free LLM API Hub — full provider list\n\n> ${llmsSummary}\n\n` +
-  `${total} providers, schema v${data.version}, generated ${data.generated}. Confirm every figure against the linked docs.\n\n` +
+  `${total} providers, dataset v${data.version}, generated ${data.generated}. Confirm every figure against the linked docs.\n\n` +
   `## Providers\n\n` +
   providers.map(provBlock).join('\n') + `\n`;
 writeFileSync(join(ROOT, 'site/llms-full.txt'), llmsFull);

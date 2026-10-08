@@ -1268,3 +1268,58 @@ test('validate rejects a category that contradicts free_type', () => {
   writeFileSync(fixture, JSON.stringify(data));
   assert.equal(exitOk(['scripts/validate.mjs', fixture]), false);
 });
+
+// ---------- provider counts derived from the data ----------
+import { providerFigures, expandFigures, injectInlineFigures, figureErrors } from './lib/figures.mjs';
+
+const walkHtml = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walkHtml(join(dir, e.name)) : e.name.endsWith('.html') ? [join(dir, e.name)] : []);
+const builtPages = () => { run(['scripts/build.mjs']); return walkHtml(join(ROOT, 'site')); };
+
+test('figures: tokens and FIG markers take the number from the data', () => {
+  const figs = providerFigures([{ verified: true }, { verified: true }, { verified: false }]);
+  assert.deepEqual(figs, { providers: 3, verified: 2 });
+  assert.equal(expandFigures('{verified} of {providers}', figs), '2 of 3');
+  assert.equal(injectInlineFigures('all <!-- FIG:providers -->99<!-- /FIG --> providers', figs), 'all <!-- FIG:providers -->3<!-- /FIG --> providers');
+});
+
+test('figures: a typed count that disagrees with the data is reported, one that matches is not', () => {
+  const figs = { providers: 68, verified: 67 };
+  assert.equal(figureErrors('the 69 verified providers', figs, 'x').length, 1);
+  assert.equal(figureErrors('all 69 providers', figs, 'x').length, 1);
+  assert.deepEqual(figureErrors('the 67 verified providers and all 68 providers', figs, 'x'), []);
+  assert.deepEqual(figureErrors('a <!-- FIG:verified -->12<!-- /FIG --> verified providers marker', figs, 'x'), []);
+  assert.deepEqual(figureErrors('expected >10 providers in the mined history', figs, 'x'), []);
+  assert.equal(figureErrors('13/67 providers on real data', figs, 'x').length, 0, 'a verified-count denominator is fine');
+  assert.equal(figureErrors('13/70 providers on real data', figs, 'x').length, 1);
+});
+
+test('no source or generated page states a provider count that differs from providers.json', () => {
+  const figs = providerFigures(JSON.parse(readFileSync(DATA, 'utf8')).providers);
+  // updates/, changes/ and state/ quote git history (old commit subjects), not the dataset
+  const files = ['README.md', 'data/best.json', ...builtPages().map((f) => f.slice(ROOT.length + 1))
+    .filter((rel) => !/^site\/(updates|changes|state)(\/|\.html$)/.test(rel))];
+  const errs = files.flatMap((rel) => figureErrors(readFileSync(join(ROOT, rel), 'utf8'), figs, rel));
+  assert.deepEqual(errs, []);
+  const best = readFileSync(join(ROOT, 'site/best/index.html'), 'utf8');
+  assert.match(best, new RegExp(`from the ${figs.verified} verified providers`));
+});
+
+test('version is described the same way everywhere: the dataset release, not a schema version', () => {
+  const read = (rel) => readFileSync(join(ROOT, rel), 'utf8');
+  run(['scripts/build.mjs']);
+  const claimsSchemaVersion = /dataset schema version|schema v\d|dataset schema\b/i;
+  const sources = {
+    'data/schema.json': JSON.parse(read('data/schema.json')).properties.version.description,
+    'docs/api.md': read('docs/api.md').split('\n').find((l) => l.startsWith('- **`version`**')),
+    'CHANGELOG.md (intro)': read('CHANGELOG.md').split('\n').slice(0, 8).join('\n'),
+    'site/llms.txt': read('site/llms.txt'),
+    'site/llms-full.txt': read('site/llms-full.txt'),
+  };
+  for (const [name, text] of Object.entries(sources)) {
+    assert.ok(text, `${name}: has a description of version`);
+    assert.doesNotMatch(text, claimsSchemaVersion, `${name} calls version a schema version`);
+  }
+  assert.match(sources['docs/api.md'], /release version/);
+  assert.match(sources['data/schema.json'], /release version/);
+});
