@@ -49,3 +49,41 @@ Found something wrong or stale? The [inaccuracy form](../../issues/new?template=
 ---
 
 _[← Docs index](README.md) · [Main README](../README.md)_
+
+## Model tier
+
+`model_tier` (0-4) says how a provider's best *free* model is rated by people, not how capable it is. It is derived, never typed:
+
+- **Source:** the LMArena [Arena Leaderboard Dataset](https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset) (CC-BY-4.0), config `text_style_control`, category `overall`. Style control discounts the effect of answer length and formatting on votes. Attribution: *Model quality data: LMArena Arena Leaderboard Dataset (CC-BY-4.0), snapshot 2026-10-02.*
+- **Mapping:** each id in a provider's `models_free` is matched by hand to one exact Arena `model_name` (`exact` = same id, `variant` = same model with a serving suffix such as `:free` or a quantisation). No match means no tier: a similar model is never substituted. A row counts only with at least 1,000 votes.
+- **Thresholds** (an editorial choice, public, independent of any provider): 4 at a rating of 1450 or more, 3 at 1400, 2 at 1330, 1 at 1250, 0 below. `boundary: true` marks a tier that could change at the next snapshot: the row's 95% interval (`ci`) crosses a threshold or comes within 5 rating points of one (derived and checked by `validate.mjs`). Changing a threshold changes published tiers. A tier can also change when the snapshot is refreshed, with or without that flag.
+- **Provider tier** = the highest tier among its rated free models. `null` (no source) scores zero and is never estimated; 0 means "sourced and below the lowest threshold".
+- **Trial credits are not rated:** a one-time credit is not continuous free access, so those offers carry no tier and no `free_limits`.
+- **Limits:** preference votes are human, subject to the usual sampling biases, and move with each snapshot. `validate.mjs` checks that every `model_tier` equals the tier of its cited rating.
+
+`free_limits` follows the same rule: numbers exactly as the provider publishes them, with the page and the day they were read, `null` when it publishes none.
+
+## The score
+
+The score ranks providers from 0 to 100. `scripts/lib/score.mjs` computes it from the data on every run, and `npm run score` prints it with each part. Every number below is a named constant in that file.
+
+| Part | Points | What it reads |
+|---|---|---|
+| Quality | 22 | `model_tier` / 4 |
+| Limits | 18 | the requests per day or tokens per day the provider publishes |
+| Friction | 13 | no card required (weight 3) and no phone required (weight 2) |
+| Commercial use | 9 | `commercial_ok` |
+| OpenAI compatibility | 4 | `openai_compatible` |
+| Stability | 4 | the share of successful probes over a real 30-day series (not measured yet) |
+| Editorial | 30 | a rating from 0 to 30 per provider in `data/editorial.json`; a provider without one gets 15. The internal rubric behind the ratings is not published |
+
+- **Friction counts as confirmed when at least one of its two parts is known.** Needing a card and needing a phone are one requirement with two parts, and a part that is known already tells you something about it; the part that is not known scores neutral. So a provider with only `card_required` or only `phone_required` confirmed has its friction confirmed, with the partial score; with neither known it is not confirmed.
+- **Unknown is not estimated.** Quality, limits and stability score zero when the data does not confirm them. Friction and commercial use are symmetric around "unknown": a confirmed good answer adds, a confirmed bad one subtracts, and unknown sits in the middle, neither rewarded nor punished. Next to every score the engine reports how many of the six mathematical inputs are confirmed ("n of 6").
+- **Limits scale (provisional).** Between a floor and a ceiling on a log scale: 10 to 10,000 requests per day, 10 thousand to 10 million tokens per day; the more generous of the two counts. A monthly figure counts as its daily share (divided by 30). Per-second and per-minute limits are a speed, not an allowance, and are not converted. These two ranges are provisional and may change.
+- **Stability is not measured yet.** It needs a series of probes spanning at least 30 days with at least 12 samples per provider, and the repository keeps no probe history, so it is unmeasured (scores zero, counts as unconfirmed) for every provider. A single probe report is never enough. It starts counting when a real series exists.
+- **Eligibility.** Only verified providers inside the 90-day freshness SLA are ranked; the top also needs `is_text_llm`. Ties break by the mathematical score, then by name.
+- **Minimum evidence: 4 of 6.** A provider enters the ranking and the top only when at least four of the six mathematical inputs are confirmed. The top holds up to ten providers and is never padded: today it is shorter than ten because few text-LLM providers have a confirmed model quality (`model_tier`) and stability is not measured yet. `npm run score` prints the current size and who is below the minimum.
+- **Editorial cap.** The editorial rating can move a provider away from the default of 15 by at most `15 × confirmed / 6` points, so the less of a provider's data is confirmed, the less the editorial part can matter; the engine clips anything beyond that. A rating more than 5 points from the default needs a public note in `data/editorial.json`.
+- **A tier near a threshold is shown, not downgraded.** When the confidence interval of the rated model crosses a tier threshold or lies within 5 rating points of one (`boundary` in `model_tier_source`), the score keeps the tier as it is and the provider is marked, because the tier could change at the next snapshot.
+- **No position is fixed.** The ranking is recomputed from the data; tests pin properties of the method (weights add up to 100, ranges, determinism), never who ranks where.
+

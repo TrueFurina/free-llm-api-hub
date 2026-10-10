@@ -12,6 +12,10 @@ import { dirname, join, resolve } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { bestPickErrors } from './lib/best.mjs';
+import { providerFigures, figureErrors } from './lib/figures.mjs';
+import { tierForRating, nearBoundary, MODEL_TIER_MIN_VOTES } from './lib/model-tier.mjs';
+import { editorialErrors } from './lib/score.mjs';
+import { readdirSync } from 'node:fs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FILE = process.argv[2] ? resolve(process.argv[2]) : join(ROOT, 'data/providers.json');
@@ -105,6 +109,21 @@ for (const p of data.providers ?? []) {
     check(Array.isArray(p.models_free) && p.models_free.every((m) => typeof m === 'string'), `${id}: models_free must be an array of strings or null`);
   }
 
+  // category follows free_type: a one-time signup balance is a trial; a free
+  // tier that renews (daily/monthly quota, monthly credit) or never runs out
+  // is ongoing. The two fields split the README, the explorer and the
+  // collections, so they must not disagree.
+  if (p.free_type !== undefined && p.category !== undefined) {
+    const expected = p.free_type === 'trial-credit' ? 'trial' : 'ongoing';
+    check(p.category === expected, `${id}: free_type "${p.free_type}" belongs in category "${expected}" (got "${p.category}")`);
+  }
+
+  // rate_limits states limits, not models or prices: either a number with a
+  // limit unit (RPM, tokens/day, requests/min, concurrency, credits...) or an
+  // explicit statement that the provider publishes none. A model list or a
+  // pricing note here showed up as the "rate limits" row on compare pages.
+  check(rateLimitsOk(p.rate_limits), `${id}: rate_limits must give a limit with a unit, or say the provider publishes none (got: "${String(p.rate_limits).slice(0, 60)}")`);
+
   // openai_base_url: null, or an http(s) URL; and it only makes sense when the API is OpenAI-compatible.
   if (p.openai_base_url !== undefined && p.openai_base_url !== null) {
     check(typeof p.openai_base_url === 'string' && URL_RE.test(p.openai_base_url), `${id}: openai_base_url must be an http(s) URL or null`);
@@ -128,6 +147,37 @@ for (const p of data.providers ?? []) {
     check(DATE_RE.test(p.last_probed || ''), `${id}: probe_status set but last_probed missing`);
   }
 
+  // Score inputs. is_text_llm is explicit on every entry. model_tier is derived, never typed: it must
+  // equal the tier of its cited rating, and it only exists for a continuous free text-LLM offer (a
+  // one-time trial credit is not continuous free access). free_limits are published numbers with a source.
+  check(typeof p.is_text_llm === 'boolean', `${id}: is_text_llm must be true or false on every entry`);
+  const tier = p.model_tier ?? null;
+  const src = p.model_tier_source ?? null;
+  check((tier === null) === (src === null), `${id}: model_tier and model_tier_source go together (both set or both null)`);
+  if (tier !== null && src !== null) {
+    check(tier === tierForRating(src.rating), `${id}: model_tier ${tier} does not match the cited rating ${src.rating} (expected ${tierForRating(src.rating)})`);
+    check(Number.isInteger(src.votes) && src.votes >= MODEL_TIER_MIN_VOTES, `${id}: the rated row needs at least ${MODEL_TIER_MIN_VOTES} votes`);
+    check(Array.isArray(src.ci) && src.ci.length === 2 && src.ci[0] <= src.rating && src.rating <= src.ci[1], `${id}: model_tier_source.ci must be [lower, upper] around the rating`);
+    check((src.boundary === true) === nearBoundary(src.ci), `${id}: model_tier_source.boundary must be ${nearBoundary(src.ci)} for ci ${JSON.stringify(src.ci)} (crosses or is within 5 points of a threshold)`);
+    check(p.is_text_llm === true, `${id}: model_tier only applies to a text-LLM offer`);
+    check(p.free_type !== 'trial-credit', `${id}: a one-time trial credit is not continuous free access, so it carries no model_tier`);
+    check(DATE_RE.test(src.snapshot || '') && src.snapshot <= data.generated, `${id}: model_tier_source.snapshot must be a date not after the dataset's generated date`);
+  }
+  if (p.free_limits != null) {
+    check(p.free_type !== 'trial-credit', `${id}: a one-time trial credit is not continuous free access, so it carries no free_limits`);
+    check(DATE_RE.test(p.free_limits.checked || '') && p.free_limits.checked <= data.generated, `${id}: free_limits.checked must be a date not after the dataset's generated date`);
+    check(URL_RE.test(p.free_limits.source || ''), `${id}: free_limits.source must be the provider's page (http/https)`);
+  }
+
+  // no_expiry: the provider's own statement that a one-time trial credit does not expire (see docs/comparison-dimensions.md).
+  if (p.no_expiry != null) {
+    check(p.free_type === 'trial-credit', `${id}: no_expiry applies only to a one-time trial credit (on a continuous free tier a null expires already means no end)`);
+    check(p.expires == null, `${id}: no_expiry and a non-null expires contradict each other`);
+    check(DATE_RE.test(p.no_expiry.checked || '') && p.no_expiry.checked <= data.generated, `${id}: no_expiry.checked must be a date not after the dataset's generated date`);
+    check(URL_RE.test(p.no_expiry.source || ''), `${id}: no_expiry.source must be the provider's page (http/https)`);
+    check(typeof p.no_expiry.quote === 'string' && p.no_expiry.quote.trim().length >= 1 && p.no_expiry.quote.length <= 300, `${id}: no_expiry.quote must be the passage, 1 to 300 characters`);
+  }
+
   // Integrity core: a verified entry must carry a dated, real source link.
   if (p.verified) {
     check(DATE_RE.test(p.last_verified || ''), `${id}: verified entry needs a YYYY-MM-DD last_verified`);
@@ -135,6 +185,13 @@ for (const p of data.providers ?? []) {
   } else {
     check(p.last_verified === null, `${id}: unverified entry must have last_verified: null`);
   }
+}
+
+function rateLimitsOk(text) {
+  if (typeof text !== 'string' || !text.trim()) return false;
+  const LIMIT_UNIT = /(rpm|rpd|tpm|tpd|rps|req|request|call|token|minute|\bmin\b|hour|day|month|second|\/s\b|neuron|concurren|credit|char|page|parallel)/i;
+  const NONE_PUBLISHED = /not (publicly |numerically )?(published|specified|stated|documented|disclosed)|no (numeric|fixed|published)|unpublished|in[- ]console|after sign-in|shown only|queue-based|no rpm/i;
+  return (/\d/.test(text) && LIMIT_UNIT.test(text)) || NONE_PUBLISHED.test(text);
 }
 
 // ---------- programs.json (credit programs) ----------
@@ -190,10 +247,27 @@ try {
   check(report.count === (report.results ?? []).length, `probe-report: count (${report.count}) must equal results.length (${(report.results ?? []).length})`);
 } catch (e) { errors.push('probe-report.json: ' + e.message); }
 
+// ---------- provider counts quoted in prose (README, docs, editorial copy) ----------
+// A typed "69 verified providers" outlived the dataset it described. Prose must use a
+// {verified}/{providers} token or a FIG marker; any literal count that disagrees fails.
+// NOT exhaustive: it only recognises "N verified providers", "all N providers" and "N/M providers".
+// A count written another way is not caught, so prefer a token over a typed number everywhere.
+{
+  const figs = providerFigures(data.providers);
+  const sources = ['README.md', 'CONTRIBUTING.md', 'GOVERNANCE.md', 'data/best.json', 'site/index.html',
+    ...readdirSync(join(ROOT, 'docs')).filter((f) => f.endsWith('.md')).map((f) => 'docs/' + f)];
+  for (const rel of sources) errors.push(...figureErrors(readFileSync(join(ROOT, rel), 'utf8'), figs, rel));
+}
+
+// ---------- editorial ratings (data/editorial.json) ----------
+try {
+  errors.push(...editorialErrors(JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')), data.providers));
+} catch (e) { errors.push('editorial.json: ' + e.message); }
+
 if (errors.length) {
   console.error(`✗ validation failed (${errors.length} issue${errors.length > 1 ? 's' : ''}):`);
   for (const e of errors) console.error('  - ' + e);
   process.exit(1);
 }
 
-console.log(`✓ valid — ${data.providers.length} providers (schema v${data.version}) + ${programCount} credit programs.`);
+console.log(`✓ valid — ${data.providers.length} providers (dataset v${data.version}) + ${programCount} credit programs.`);

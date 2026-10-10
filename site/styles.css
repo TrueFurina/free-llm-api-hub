@@ -47,12 +47,12 @@
   --border-strong: #c3cfc8;
   --text: #0e1a13;
   --muted: #46584e;
-  --faint: #6b7970;
-  --accent: #0f8a50;
-  --accent-dim: #0c7444;
+  --faint: #566860;
+  --accent: #0b7040;
+  --accent-dim: #095a33;
   --accent-ink: #ffffff;
-  --green: #0f8a50;
-  --warn: #9a6a12;
+  --green: #0b7040;
+  --warn: #7d540d;
   --red: #c53a22;
   --shadow-sm: 0 1px 2px rgba(14,26,19,.06);
   --shadow-md: 0 12px 34px rgba(14,26,19,.10);
@@ -100,7 +100,7 @@ svg.i { width: 15px; height: 15px; flex: none; vertical-align: -2px; }
 .brand:hover { text-decoration: none; }
 .brand-name { font-family: var(--font-mono); font-weight: 700; font-size: .98rem; white-space: nowrap; letter-spacing: -.02em; }
 .nav { display: flex; gap: 4px; margin-left: 6px; }
-.nav a { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; font-family: var(--font-mono); font-weight: 500; padding: 6px 10px; border-radius: 7px; }
+.nav a { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--muted); font-size: .88rem; font-family: var(--font-mono); font-weight: 500; padding: 6px 10px; border-radius: 7px; }
 .nav a svg.i { width: 14px; height: 14px; opacity: .8; }
 .nav a:hover svg.i { opacity: 1; }
 .nav a:hover { color: var(--text); background: var(--panel); text-decoration: none; }
@@ -243,10 +243,13 @@ tbody tr:hover { background: var(--panel); }
   #table tbody tr:hover { background: var(--panel); }
 }
 #table td:nth-child(3) { max-width: 42ch; }
+/* keyboard row navigation (#174): the focused row gets the same accent ring as every other focusable control */
+#table tbody tr:focus { outline: none; }
+#table tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--panel); }
 table.sortable thead th:not(.sorted)::after { content: " ⇅"; opacity: .28; font-weight: 400; }
 .name a { color: var(--text); font-weight: 700; font-family: var(--font-mono); font-size: .92rem; letter-spacing: -.01em; }
 .name a:hover { color: var(--accent); }
-.best { color: var(--accent); font-size: .8rem; margin-top: 3px; opacity: .85; }
+.best { color: var(--accent); font-size: .8rem; margin-top: 3px; }
 .mods { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .mods span { font-size: .66rem; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .03em; }
 .badge { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; padding: 2px 8px; border-radius: 6px; white-space: nowrap; font-family: var(--font-mono); }
@@ -348,7 +351,7 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 .prov-card p { margin: 0; font-size: .92rem; }
 .prov-card code { word-break: break-all; }
 .prov-summary { background: color-mix(in srgb, var(--accent) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: var(--radius); padding: 20px 22px; margin: 22px 0; }
-.prov-summary h3 { margin: 0 0 6px; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
+.prov-summary h2 { margin: 0 0 6px; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
 .prov-summary p { margin: 0; font-size: 1.04rem; line-height: 1.55; }
 .prov-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
 /* Provider card hero — centered header, breadcrumbs, badges and actions. */
@@ -368,8 +371,26 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 .meta-k { color: var(--muted); font-family: var(--font-mono); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
 .meta-v { color: var(--text); font-size: .9rem; }
 .meta-v code { word-break: break-all; color: var(--accent); }
+.meta-v a { text-decoration: underline; text-underline-offset: 2px; }
 .prov-back { margin-top: 30px; font-family: var(--font-mono); font-size: .85rem; }
 @media (max-width: 560px) { .meta-row { grid-template-columns: 1fr; gap: 3px; } }
+/* provider compare view (/compare/) — one column per provider, one row per field */
+.cmp-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin: 6px 0 22px; }
+.cmp-slot { display: flex; flex-direction: column; gap: 5px; flex: 1 1 180px; min-width: 0; }
+.cmp-slot span { color: var(--muted); font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.cmp-slot .sel { width: 100%; }
+.compare-scroll { overflow-x: auto; margin: 8px 0 4px; border: 1px solid var(--border); border-radius: var(--radius); }
+.compare-table { min-width: 560px; }
+.compare-table thead th { white-space: normal; }
+.compare-table thead th a { color: var(--text); }
+.compare-table thead th a:hover { color: var(--accent); }
+.compare-table tbody th[scope="row"] { text-align: left; padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--muted); font-family: var(--font-mono); font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.compare-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel) 42%, transparent); }
+.compare-table td code { word-break: break-all; }
+.cmp-sub { margin-top: 4px; font-size: .8rem; }
+.tri-yes { color: var(--text); }
+.tri-no { color: var(--text); }
+.tri-unk { color: var(--muted); font-style: italic; }
 .muted { color: var(--muted); }
 .model-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; }
 .model-chips code { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; font-size: .82rem; color: var(--accent); word-break: break-all; }
@@ -415,8 +436,8 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 .footer-brand p { max-width: 38ch; margin: 0; color: color-mix(in srgb, var(--text) 74%, transparent); line-height: 1.6; }
 .footer-brand p strong { color: var(--accent); font-weight: 700; }
 .footer-brand .star-btn { display: flex; margin-top: 18px; width: fit-content; }
-.footer-col h4 { position: relative; display: inline-block; font-size: .78rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text); margin: 2px 0 16px; padding-bottom: 8px; font-family: var(--font-mono); font-weight: 700; }
-.footer-col h4::after { content: ""; position: absolute; left: 0; bottom: 0; width: 22px; height: 2px; background: var(--accent); border-radius: 2px; }
+.footer-col .footer-h { position: relative; display: inline-block; font-size: .78rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text); margin: 2px 0 16px; padding-bottom: 8px; font-family: var(--font-mono); font-weight: 700; }
+.footer-col .footer-h::after { content: ""; position: absolute; left: 0; bottom: 0; width: 22px; height: 2px; background: var(--accent); border-radius: 2px; }
 .footer-col a { display: block; color: var(--muted); padding: 4px 0; }
 .footer-col a:hover { color: var(--accent); text-decoration: none; }
 .footer-bottom { border-top: 1px solid var(--border); padding: 24px 0 46px; color: var(--faint); font-size: .8rem; font-family: var(--font-mono); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
@@ -464,3 +485,74 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 }
 @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } .footer-top { grid-template-columns: 1fr; } .notes { max-width: none; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; transition: none !important; } .caret { animation: none; } }
+
+/* Links inside running text must not rely on colour alone. */
+p.muted a, .prose p a, .prov-summary p a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* Sorting on small screens: the column headers are hidden there, so a select takes their place. */
+.sort-mobile { display: none; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); font-family: var(--font-mono); }
+@media (max-width: 720px) { .sort-mobile { display: inline-flex; } }
+.search-input { cursor: text; flex: 1 1 180px; max-width: 260px; min-width: 150px; }
+
+/* Narrow phones: the brand and the three header buttons must fit without the theme toggle leaving the viewport. */
+@media (max-width: 420px) {
+  .header-inner { gap: 10px; }
+  .brand { gap: 8px; }
+  .brand-name { font-size: .85rem; }
+  .header-actions { gap: 6px; }
+}
+
+/* Provider pages: sections are not numbered (the order is the same on every page) and the requirement flags read as words. */
+.prov-prose h2::before { content: none; }
+.prov-reqs { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 14px 0 20px; }
+.prov-reqs .req { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+.prov-reqs dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 700; }
+.prov-reqs dd { margin: 4px 0 0; font-size: .95rem; }
+.limits-table { width: auto; min-width: 320px; margin: 12px 0 4px; border-collapse: collapse; }
+.limits-table th, .limits-table td { text-align: left; padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: .92rem; }
+.limits-table th { color: var(--muted); font-weight: 500; }
+.limits-table td { font-variant-numeric: tabular-nums; font-weight: 700; }
+.limits-src { margin: 4px 0 14px; font-size: .88rem; }
+.models-none { margin: 14px 0; }
+
+/* No horizontal page scroll on narrow screens (360 to 860 px).
+   Cards (<= 720px): the first-column width of the table (21%) beat the card width, which crushed the
+   provider name to 64px and pushed long notes past the viewport; cells may now shrink and wrap.
+   Tablet (721 to 1000px): the table needed 939px, so the headers wrap and the cells take less padding.
+   /models/: same for its four columns on phones. */
+@media (max-width: 720px) {
+  #table td:nth-child(1) { width: 100%; }
+  #table td { min-width: 0; overflow-wrap: anywhere; }
+}
+@media (min-width: 721px) and (max-width: 1000px) {
+  #table thead th { white-space: normal; padding: 12px 6px; letter-spacing: 0; }
+  #table td { padding-left: 6px; padding-right: 6px; }
+  #table td.notes { max-width: 24ch; }
+}
+.model-table th, .model-table td { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .model-table th, .model-table td { padding-left: 6px; padding-right: 6px; }
+  .model-table thead th { white-space: normal; letter-spacing: 0; font-size: .75rem; }
+}
+
+/* The stat tiles are written by explorer.js, so the block is empty until the script runs. Without a reserved
+   height it grew from 0 to its full size and pushed the "Popular guides" row down (layout shift 0.068 on a phone).
+   The height is reserved only where scripts run: with scripting off the block stays empty and takes no room.
+   The heights are measured (2026-10-09, JetBrains Mono, four tiles): 157px in one row, 288px in two rows, 308px
+   when two labels wrap (<= 479px). Re-measure them if a tile is added or removed, a label changes length or
+   the font changes (scripts/build.test.mjs pins the numbers; Lighthouse CLS on the home should stay at 0). */
+@media (scripting: enabled) {
+  .stats { min-height: 157px; }
+}
+@media (scripting: enabled) and (max-width: 640px) {
+  .stats { min-height: 288px; }
+}
+@media (scripting: enabled) and (max-width: 479px) {
+  .stats { min-height: 308px; }
+}
+
+/* Provider pages on a phone (360 to 390 px): a note with a long unbroken string (a documentation URL, a model id)
+   was wider than the card and widened the whole page (7 of the 68 pages, up to 614px at 360px). The string now
+   wraps at the edge when it does not fit; ordinary words and numbers still break only at spaces, and the
+   code blocks keep their own horizontal scroll. */
+.prov-card p, p.muted { overflow-wrap: anywhere; }

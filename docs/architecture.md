@@ -14,9 +14,12 @@ data/schema.json       │                              collections/*.md, docs/c
                        │                              site/guides-and-collections/ (unified hub),
                        │                              site/api/v1/*, site/llms.txt, site/llms-full.txt,
                        │                              site/sitemap.xml, site/updates.html and site/updates/page/*,
-                       │                              site/feed.xml,
-                       │                              site/badges/*.json, site/shared-rules.js,
-                       │                              site/shared-rows.js (both gitignored)
+                       │                              site/feed.xml, site/changes/ + site/changes.xml
+                       │                              (weekly field-level change feed),
+                       │                              site/state/ (monthly state reports),
+                       │                              site/badges/*.json, site/compare/ (compare view),
+                       │                              site/shared-rules.js, site/shared-rows.js,
+                       │                              site/shared-sort.js, site/shared-compare.js (gitignored)
                        └──►  everything is DERIVED. Never hand-edit generated files.
 ```
 
@@ -28,14 +31,14 @@ data/schema.json       │                              collections/*.md, docs/c
 
   **The one deliberate exception is `badge-freshness.json`.** It has to be date-relative — a freshness badge that only moves when the data moves is not measuring freshness — so it is committed *and* excluded from both diff-gates (`npm run check` and the drift report list it nowhere). It goes stale between refreshes by design; it is recommitted on every data/build pass (see [update-playbook.md](update-playbook.md)). Nothing may assert that the committed badge equals a freshly built one, because on any day but the last refresh it does not — the test in `build.test.mjs` checks the file is internally consistent instead.
 
-**The gitignored derived files are pinned too.** `derived-fingerprints.json` (a sha256 of every build output under `site/` that is not tracked by git) is itself a drift-gate target: a change to any gitignored derivative - `updates.html`, `feed.xml`, `models/`, `api/`, `badges/`, `legal/`, `programs/`, `llms.txt`, `shared-rules.js`/`shared-rows.js`, ... - is visible in review and fails CI until the author commits the regenerated fingerprint. The set is derived from `git ls-files site/` at the end of `build.mjs`, so it stays in sync with `.gitignore` automatically. The deliberate exclusions are `site/p/` (provider pages render "verified Xd ago" relative to the current day, the same reason they are gitignored at all) and the git-log-derived files — `updates.html`, `updates/page/*`, `feed.xml`, `api/v1/history.json` — whose content embeds the commit hash/subject or dates of the build history, so it shifts across a squash merge and cannot be deterministically pinned (they are regenerated on every deploy).
+**The gitignored derived files are pinned too.** `derived-fingerprints.json` (a sha256 of every build output under `site/` that is not tracked by git) is itself a drift-gate target: a change to any gitignored derivative - `models/`, `api/`, `legal/`, `programs/`, `llms.txt`, `shared-rules.js`/`shared-rows.js`, ... - is visible in review and fails CI until the author commits the regenerated fingerprint. The set is derived from `git ls-files site/` at the end of `build.mjs`, so it stays in sync with `.gitignore` automatically. The deliberate exclusions are the date-relative outputs — `site/p/` (provider pages render "verified Xd ago" relative to the current day, the same reason they are gitignored at all) and `site/badges/` (each per-provider badge turns yellow past 60 days and red past the SLA, so its bytes change with the calendar, not the data) — and the git-log-derived files — `updates.html`, `updates/page/*`, `feed.xml`, `api/v1/history.json`, and the weekly change feed and monthly reports mined from the same history (`changes/`, `changes.xml`, `api/v1/changes.json`, `state/`) — whose content embeds the commit hash/subject or dates of the build history, so it shifts across a squash merge and cannot be deterministically pinned (they are regenerated on every deploy).
 
 **Deploys are verified live.** `pages.yml` runs a `verify-live` job after every deploy: it re-checks the sitemap parity against the live site (`npm run check-live`, retrying `FLLM_LIVE_ATTEMPTS` times for edge propagation) and smoke-tests every URL of the published sitemap (`npm run smoke-live`), so a deploy that serves stale or broken pages fails the workflow.
 
 ## 2. Data model
 
 ### `data/providers.json`
-Top level: `{ $schema, version (semver), generated (YYYY-MM-DD), source, note, providers: [...] }`.
+Top level: `{ $schema, version (semver, the dataset release), generated (YYYY-MM-DD), source, note, providers: [...] }`.
 Schema in `data/schema.json`; validated by `scripts/validate.mjs`. Canonical byte-format enforced by `scripts/_serialize.mjs` (the `ORDER` array). **Field order in the file MUST match `ORDER`** or the serializer self-test fails.
 
 Per-provider fields (in serializer order):
@@ -59,7 +62,11 @@ Per-provider fields (in serializer order):
 | `commercial_ok` | true/false/null | |
 | `openai_compatible` | true/false/null | |
 | `openai_base_url` | url \| null | only when `openai_compatible !== false` |
-| `env_key` | UPPER_SNAKE | secret NAME for probe/fetch-models. **STRIPPED from all public output** (homepage payload, site/providers.json, /api). Never the value. |
+| `is_text_llm` | boolean (required) | free offering gives text/chat LLM API access; eligibility for the top 10 |
+| `model_tier` / `model_tier_source` | 0-4 / object, or both null | derived from a cited LMArena rating (thresholds in `lib/model-tier.mjs`); validated against the rating |
+| `free_limits` | object \| null | published numeric limits with `source` and `checked`; never estimated |
+| `no_expiry` | object \| null | trial credits only: the provider's own statement that the credit does not expire, with `source`, `checked` and a short `quote`; validated, never combined with a non-null `expires` |
+| `env_key` | UPPER_SNAKE | secret NAME for probe/fetch-models. **STRIPPED from all public output** (homepage payload, site/providers.json, /api) except the two client configs (`api/v1/openai-clients.json`, `api/v1/litellm.yaml`), whose purpose is to tell users which variable to put their own key in. Never the value. |
 | `verified` | boolean | true = independently confirmed against own docs on `last_verified` |
 | `last_verified` | YYYY-MM-DD \| null | must be null when `verified:false` |
 | `added` | YYYY-MM-DD (optional) | provenance: when it entered the dataset. Drives the NEW badge (≤45d) in the shared row code — SSR and client alike. Set once; never changes. |
@@ -101,13 +108,17 @@ Pages:
 - **`/models/`** — searchable model→provider index from every `models_free`.
 - **`/guides/<slug>`** — data-generated SEO guides (`GUIDES` in build.mjs): filter, top pick, FAQ (`FAQPage` JSON-LD), related guides, per-page OG. The unified **hub lives at `/guides-and-collections/`** (two sections — guides and collections); the old `/guides/` and `/collections/` roots are meta-refresh redirects to it.
 - **`/collections/<slug>`** — editorial collections (`COLLECTIONS` in build.mjs). Each has repo markdown (`collections/*.md`) + live HTML, FAQ on higher-traffic ones, per-collection OG. (`/collections/` root redirects to the hub.)
-- **`/p/<slug>`** (file `site/p/<slug>.html`) — provider cards, clean canonical URL. Gitignored + regenerated on deploy → may use the current date (freshness read-out). Badges, "Official docs" + "Visit website", meta table, free-models block, modality-aware quickstart, change history (from git).
+- **`/p/<slug>`** (file `site/p/<slug>.html`) — provider cards, clean canonical URL. Gitignored + regenerated on deploy → may use the current date (freshness read-out). Badges, "Official docs" + "Visit website" + "Report a change" (opens the `inaccuracy.yml` issue form with `provider` and the `[outdated] <name>` title prefilled), meta table, free-models block, modality-aware quickstart, change history (from git).
 - **`/programs/`** — startup + research credit program pages, from programs.json.
-- **`/api/v1/`** — static JSON API: `providers.json`, `programs.json`, `history.json`, `index.json` (manifest), slices (`ongoing,trial,perpetual,no-card,no-phone,commercial,openai-compatible`), `modality/<m>.json`. Every object carries `version`+`generated`.
+- **`/compare/`** — provider compare view. `/compare/?compare=a,b` (2–4 slugs; `?compare=` on the home page redirects here) renders a side-by-side table in the browser (`site/compare.js`); `/compare/<a>-vs-<b>/` are static pages for a small, deterministic set of pairs: the editorial picks in `data/best.json` compared pairwise where they share a modality, ordered by rank, at most 4 pages per provider and 30 in all. Both render with `compareTableHtml()` in `scripts/lib/compare.mjs` (serialized to `site/shared-compare.js`, `window.FLLM_COMPARE`). The pages are gitignored, pinned in `derived-fingerprints.json` and listed in the sitemap, so they must not depend on the current date. Provider pages link to the comparisons they appear in.
+- **`/api/v1/`** — static JSON API: `providers.json`, `programs.json`, `history.json`, `changes.json` (field-level from/to changes grouped by ISO week, last 12 weeks), `best.json`, `index.json` (manifest), `schema.json` (copy of `data/schema.json`), slices (`ongoing,trial,perpetual,no-card,no-phone,commercial,openai-compatible`), `modality/<m>.json`, plus client configs for the verified OpenAI-compatible providers: `openai-clients.json` and `litellm.yaml` (a LiteLLM proxy `model_list`, generated by `scripts/lib/client-config.mjs`). Every JSON object carries `version`+`generated`. Stability and versioning policy: [api.md](api.md).
 - **`llms.txt` + `llms-full.txt`** — llmstxt.org index + full provider expansion, for AI agents.
-- **`/updates.html` + `/feed.xml`** — from git log. **`/legal/`** — privacy/terms (noindex). **`/badges/`** — per-provider shields.io endpoint JSON. Plus `sitemap.xml`, `robots.txt`, `CNAME`, `og/`, `favicon.svg`, `fonts/`, `styles.css`, `site.js`, `explorer.js`, `widget.js`.
+- **`/updates.html` + `/feed.xml`** — from git log.
+- **`/changes/` + `/changes.xml`** — "What changed this week": field-level changes (field, from, to) grouped by ISO week, newest first, the last 12 weeks ending at the newest change; one RSS item per week. Logic in `scripts/lib/changes.mjs` (pure, fixture-tested); the before/after values come from the `changes` array the history miner (`scripts/lib/history.mjs`) attaches to each `changed` event, which `api/v1/history.json` strips to keep its published shape.
+- **`/state/` + `/state/YYYY-MM/`** — monthly "State of free LLM APIs" report, one per month with a committed revision of `providers.json`. Every number is computed (`scripts/lib/state.mjs`) from that month's last committed revision, the mined history and the `added` field: counts by category and modality, verified share, oldest/median verification age as of the month end (the newest month is measured at its last revision), field changes and providers changed that month, providers added that month. Only `/changes/` and `/state/` are in `sitemap.xml`: the per-month URLs follow commit dates, which a squash merge can move into another month, so listing them would make the drift-gated sitemap non-deterministic.
+- All of the above is produced by `build.mjs` alone (the deploy already runs it); nothing is scheduled. **`/legal/`** — privacy/terms (noindex). **`/badges/`** — per-provider shields.io endpoint JSON. Plus `sitemap.xml`, `robots.txt`, `CNAME`, `og/`, `favicon.svg`, `fonts/`, `styles.css`, `site.js`, `explorer.js`, `widget.js`.
 
-Client JS: `site/site.js` (loaded on EVERY page) = theme toggle, live GitHub stars (6h cache), "/" to focus search, code-block copy buttons, mobile nav toggle. `site/explorer.js` = homepage explorer logic. `site/widget.js` = the embeddable widget. All scripts run under a hash-based Content-Security-Policy.
+Client JS: `site/site.js` (loaded on EVERY page) = theme toggle, live GitHub stars (6h cache), "/" to focus search, code-block copy buttons, mobile nav toggle. `site/explorer.js` = homepage explorer logic, including keyboard row navigation (roving tabindex: arrow Up/Down, Home/End, Enter opens the provider page; the movement rule is `rowKeyTarget` in `scripts/lib/rows.mjs`). `site/compare.js` = the compare view picker. `site/widget.js` = the embeddable widget. All scripts run under a hash-based Content-Security-Policy.
 
 ## 5. Design system (`site/styles.css`)
 - Terminal-green identity: `--accent:#3fce8f`, self-hosted JetBrains Mono, CSS vars + `[data-theme]` dark/light (persisted), SVG icon sprite (`ic-*`), `>_`-style prompts, AA contrast.

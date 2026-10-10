@@ -17,6 +17,10 @@ site/programs/
 site/updates.html
 site/updates/
 site/feed.xml
+site/changes/
+site/changes.xml
+site/state/
+site/sitemap-state.xml
 site/api/
 site/llms.txt
 site/llms-full.txt
@@ -40,3 +44,7 @@ site/shared-sort.js
 
 # Freebuff desktop data (local DB) — never publish
 .freebuff/
+
+# Provider compare view (#175): static /compare/ pages and the shared table renderer, emitted by build.mjs from scripts/lib/compare.mjs
+site/compare/
+site/shared-compare.js
