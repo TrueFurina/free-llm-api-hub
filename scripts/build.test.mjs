@@ -10,7 +10,7 @@ import { tmpFile } from './lib/tmp.mjs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { ORDER, roundTripError } from './_serialize.mjs';
+import { ORDER, roundTripError, serialize } from './_serialize.mjs';
 import { freshnessBadge, freshnessColor, freshnessStatus, recScore, SLA_DAYS, DUE_SOON_DAYS } from './lib/rules.mjs';
 import { esc, stripTags } from './lib/escape.mjs';
 import { mineProviderHistory, assertHistoryPlausible, historyFromRevisions } from './lib/history.mjs';
@@ -460,35 +460,59 @@ test('the committed OG manifest matches the current dataset', () => {
   assert.deepEqual(manifest, buildOgManifest(providers));
 });
 
-test('the README top-20 table renders every editorial pick with its verified date', () => {
+import { topEntries } from './lib/best.mjs';
+const topOfData = () => {
   const data = JSON.parse(readFileSync(DATA, 'utf8'));
-  const best = JSON.parse(readFileSync(join(ROOT, 'data/best.json'), 'utf8'));
+  return topEntries(data.providers, {
+    editorial: JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')),
+    probeReport: JSON.parse(readFileSync(join(ROOT, 'data/probe-report.json'), 'utf8')),
+    now: new Date(data.generated + 'T12:00:00Z'),
+  });
+};
+
+test('the README top-10 table renders every provider of the score top with its score and verified date', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  const bySlug = new Map(data.providers.map((x) => [x.slug, x]));
-  assert.equal(best.entries.length, 20, 'README is the editorial top 20, not the full list');
-  for (const e of best.entries) {
-    const p = bySlug.get(e.slug);
-    assert.ok(p, `${e.slug} is not in the dataset`);
-    assert.ok(readme.includes(`[${p.name}](${p.docs_url})`), `${e.slug}: README links the provider docs`);
-    assert.ok(readme.includes(`✅ ${p.last_verified}`), `${e.slug}: README shows the verification date`);
+  const top = topOfData();
+  assert.ok(top.length > 0 && top.length <= 10, 'the README shows up to ten providers');
+  for (const e of top) {
+    assert.ok(readme.includes(`[${e.p.name}](${e.p.docs_url})`), `${e.p.slug}: README links the provider docs`);
+    assert.ok(readme.includes(`✅ ${e.p.last_verified}`), `${e.p.slug}: README shows the verification date`);
+    assert.ok(readme.includes(`${e.total.toFixed(1)}<br><sub>${e.confirmed} of ${e.of} inputs</sub>`), `${e.p.slug}: README shows the score and its confirmed inputs`);
   }
+  assert.ok(!/top 20|top-20/i.test(readme), 'no top 20 text remains in the README');
 });
 
-test('/api/v1/best.json exposes the editorial top 20 with full profiles', () => {
+test('/api/v1/best.json exposes the score top with its parts and full profiles', () => {
   const p = join(ROOT, 'site/api/v1/best.json');
-  if (!existsSync(p)) run(['scripts/build.mjs']);
+  run(['scripts/build.mjs']);
   const payload = JSON.parse(readFileSync(p, 'utf8'));
-  const best = JSON.parse(readFileSync(join(ROOT, 'data/best.json'), 'utf8'));
-  assert.equal(payload.count, 20, 'best.json carries the top 20 count');
-  assert.equal(payload.picks.length, 20, 'best.json lists all 20 picks');
-  assert.equal(payload.updated, best.updated, 'best.json carries the editorial updated date');
+  const top = topOfData();
+  assert.equal(payload.count, top.length, 'best.json carries the top count');
+  assert.equal(payload.picks.length, top.length);
   payload.picks.forEach((pick, i) => {
-    const e = best.entries[i];
     assert.equal(pick.rank, i + 1, `pick ${i} rank`);
-    assert.equal(pick.slug, e.slug, `pick ${i} slug`);
-    assert.equal(pick.why, e.why, `pick ${i} why`);
-    assert.ok(pick.name && pick.free_tier && pick.docs_url, `${e.slug}: pick carries its full profile`);
+    assert.equal(pick.slug, top[i].p.slug, `pick ${i} slug`);
+    assert.equal(pick.podium, i < 3, `pick ${i} podium`);
+    assert.equal(pick.score, Math.round(top[i].total * 10) / 10, `pick ${i} score`);
+    assert.ok(pick.parts && pick.of === 6, `${pick.slug}: pick carries the parts of its score`);
+    assert.ok(pick.name && pick.free_tier && pick.docs_url, `${pick.slug}: pick carries its full profile`);
   });
+});
+
+test('/best shows the podium of three and the methodology page states the rules', () => {
+  run(['scripts/build.mjs']);
+  const top = topOfData();
+  const best = readFileSync(join(ROOT, 'site/best/index.html'), 'utf8');
+  assert.equal((best.match(/class="best-item best-podium /g) || []).length, Math.min(3, top.length), 'three podium cards');
+  assert.equal((best.match(/<li class="best-item/g) || []).length, top.length, 'one card per provider of the top');
+  for (const e of top) assert.ok(best.includes(`href="../p/${e.p.slug}"`), `${e.p.slug} is on /best`);
+  const method = readFileSync(join(ROOT, 'site/best/methodology/index.html'), 'utf8');
+  assert.match(method, /Being a partner scores nothing/);
+  assert.match(method, /editorial rating/);
+  assert.match(method, /30/);
+  assert.match(method, /internal rubric behind those ratings is not published/);
+  assert.match(method, new RegExp(`Data of ${JSON.parse(readFileSync(DATA, 'utf8')).generated}`));
+  assert.match(readFileSync(join(ROOT, 'site/sitemap.xml'), 'utf8'), /<loc>https:\/\/freellmapihub\.com\/best\/methodology\/<\/loc>/);
 });
 
 test('the explorer does not claim a column sort before the user chooses one', () => {
@@ -1186,7 +1210,7 @@ test('the compare view loads its scripts under the CSP and the null tri-state re
   run(['scripts/build.mjs']);
   const index = readFileSync(join(ROOT, 'site/compare/index.html'), 'utf8');
   assert.match(index, /<script src="\.\.\/shared-compare\.js" defer><\/script>\n<script src="\.\.\/compare\.js" defer><\/script>\n<\/body>/);
-  assert.equal((index.match(/<script>/g) || []).length, 1, 'only the hashed theme guard runs inline');
+  assert.equal(index.split('<script>').length - 1, 1, 'only the hashed theme guard runs inline');
   assert.equal((index.match(/<select class="sel" name="p">/g) || []).length, COMPARE_MAX_SLOTS);
   // ai-horde has commercial_ok: null in the dataset; any page with a null flag
   // must say so instead of rendering it as "no".
@@ -1380,6 +1404,32 @@ test('no_expiry: the validator accepts a sourced statement on a trial credit and
   assert.equal(validateAfter((d) => { const t = trial(d); t.no_expiry = { ...good }; delete t.no_expiry.quote; }), false, 'the quote is required');
 });
 
+test('data_policy: the validator accepts a sourced statement and rejects the rest', () => {
+  const good = { trains_on_prompts: false, retention: '30 days', source: 'https://example.com/privacy', checked: '2026-10-09' };
+  const one = (d) => d.providers[0];
+  assert.equal(validateAfter((d) => { one(d).data_policy = { ...good }; }), true, 'a sourced statement passes');
+  assert.equal(validateAfter((d) => { one(d).data_policy = { ...good, retention: null }; }), true, 'one stated part is enough');
+  assert.equal(validateAfter((d) => { one(d).data_policy = { ...good, trains_on_prompts: null }; }), true, 'retention alone is enough');
+  assert.equal(validateAfter((d) => { one(d).data_policy = null; }), true, 'null means nobody recorded it');
+  assert.equal(validateAfter((d) => { one(d).data_policy = { ...good, trains_on_prompts: null, retention: null }; }), false, 'an all-null policy records nothing');
+  for (const bad of [{ source: 'javascript:alert(1)' }, { source: '' }, { checked: '2999-01-01' }, { checked: 'yesterday' }, { retention: '' }, { retention: 'x'.repeat(121) }, { trains_on_prompts: 'no' }, { extra: 1 }]) {
+    assert.equal(validateAfter((d) => { one(d).data_policy = { ...good, ...bad }; }), false, `rejected: ${JSON.stringify(bad).slice(0, 40)}`);
+  }
+  assert.equal(validateAfter((d) => { const dp = { ...good }; delete dp.source; one(d).data_policy = dp; }), false, 'the source is required');
+  assert.equal(validateAfter((d) => { const dp = { ...good }; delete dp.checked; one(d).data_policy = dp; }), false, 'the day it was read is required');
+});
+
+test('data_policy: a provider that has it shows the section on its page, and the serializer keeps it', () => {
+  const data = JSON.parse(readFileSync(DATA, 'utf8'));
+  data.providers[0].data_policy = { trains_on_prompts: true, retention: '30 days', source: 'https://example.com/privacy', checked: data.generated };
+  assert.equal(roundTripError(serialize(data)), null, 'the serializer round-trips the field');
+  assert.ok(serialize(data).includes('"data_policy"'), 'the serializer writes it');
+  const html = dataPolicyHtml(data.providers[0]);
+  assert.match(html, /Trains on your prompts<\/dt><dd><span class="tri tri-yes">yes<\/span>/);
+  assert.match(html, /30 days/);
+  assert.match(html, /href="https:\/\/example\.com\/privacy"/);
+});
+
 test('expiry reads the same on the provider page, the comparison and the API', () => {
   run(['scripts/build.mjs']);
   const { providers } = JSON.parse(readFileSync(DATA, 'utf8'));
@@ -1533,6 +1583,17 @@ import { providerFigures, expandFigures, injectInlineFigures, figureErrors } fro
 
 const walkHtml = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
   e.isDirectory() ? walkHtml(join(dir, e.name)) : e.name.endsWith('.html') ? [join(dir, e.name)] : []);
+// Removes every open..close block with string search. A single regex pass leaves
+// fragments behind on nested or malformed input (CodeQL js/bad-tag-filter), and
+// each removal here shortens the string, so the loop always ends.
+const dropBlocks = (html, open, close) => {
+  let out = html;
+  for (let i = out.indexOf(open); i !== -1; i = out.indexOf(open)) {
+    const j = out.indexOf(close, i + open.length);
+    out = out.slice(0, i) + (j === -1 ? '' : out.slice(j + close.length));
+  }
+  return out;
+};
 const builtPages = () => { run(['scripts/build.mjs']); return walkHtml(join(ROOT, 'site')); };
 
 test('figures: tokens and FIG markers take the number from the data', () => {
@@ -1618,7 +1679,7 @@ test('internal links in the built site resolve to a page (no 404)', () => {
   for (const f of builtPages()) {
     const rel = f.slice(siteDir.length + 1);
     const pagePath = '/' + (rel.endsWith('index.html') ? rel.slice(0, -'index.html'.length) : rel.replace(/\.html$/, ''));
-    const html = readFileSync(f, 'utf8').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+    const html = dropBlocks(dropBlocks(readFileSync(f, 'utf8'), '<script', '</script>'), '<!--', '-->');
     for (const m of html.matchAll(/<a\b[^>]*\shref="([^"]+)"/g)) {
       const href = m[1];
       if (/^(https?:|mailto:|tel:|javascript:|#|data:)/.test(href)) continue;
@@ -1720,4 +1781,166 @@ test('long strings in provider notes wrap instead of widening the page on a phon
   // this rule none is, at 360 and 390px. The rule is pinned by text because a browser is not part of the suite.
   const css = readFileSync(join(ROOT, 'site/styles.css'), 'utf8').replace(/\s+/g, ' ');
   assert.match(css, /\.prov-card p, p\.muted \{ overflow-wrap: anywhere; \}/);
+});
+
+test('the /compare/ tables show the score and the model quality tier, in the static pages and the browser bundle', () => {
+  run(['scripts/build.mjs']);
+  const scores = JSON.parse(readFileSync(join(ROOT, 'site/scores.json'), 'utf8')).scores;
+  const dir = readdirSync(join(ROOT, 'site/compare')).find((d) => d.includes('-vs-'));
+  const page = readFileSync(join(ROOT, 'site/compare', dir, 'index.html'), 'utf8');
+  assert.match(page, /<th scope="row">Score<\/th>/);
+  assert.match(page, /<th scope="row">Model quality tier<\/th>/);
+  const [a, b] = dir.split('-vs-');
+  for (const slug of [a, b]) {
+    const sc = scores[slug];
+    if (sc) assert.ok(page.includes(`<strong>${sc.total.toFixed(1)}</strong> / 100`), `${slug}: the page shows its score`);
+  }
+  // the browser view runs the same function: with scores it adds the rows, without them the table is unchanged
+  const bundle = readFileSync(join(ROOT, 'site/shared-compare.js'), 'utf8');
+  assert.match(bundle, /Model quality tier/);
+  const { compareTableHtml } = (new Function('window', bundle + '; return window.FLLM_COMPARE;'))({});
+  const p = JSON.parse(readFileSync(DATA, 'utf8')).providers[0];
+  assert.doesNotMatch(compareTableHtml([p, p]), /Model quality tier/);
+  assert.match(compareTableHtml([p, p], { scores: { [p.slug]: { total: 51.25, confirmed: 4, of: 6, rank: 2 } } }), /<strong>51\.3<\/strong> \/ 100[\s\S]*4 of 6 inputs confirmed · <a href="best\/">#2 in the top 10<\/a>/);
+});
+
+// ---------- /coverage/ — the data-coverage task board ----------
+import { coverageMainHtml, coverage as coverageOf } from './lib/coverage.mjs';
+
+// A separate path from lib/coverage.mjs on purpose: plain loops and the populations as the card words them.
+const coverageByHand = (providers) => {
+  const out = {};
+  const add = (key, inPop, has) => {
+    let total = 0; let confirmed = 0;
+    for (const p of providers) {
+      if (!inPop(p)) continue;
+      total += 1;
+      if (has(p)) confirmed += 1;
+    }
+    out[key] = { total, confirmed, open: total - confirmed };
+  };
+  const verified = (p) => p.verified === true;
+  const verifiedText = (p) => p.verified === true && p.is_text_llm === true;
+  const verifiedTextNotTrial = (p) => verifiedText(p) && p.free_type !== 'trial-credit';
+  add('card_required', verified, (p) => p.card_required === true || p.card_required === false);
+  add('phone_required', verified, (p) => p.phone_required === true || p.phone_required === false);
+  add('commercial_ok', verified, (p) => p.commercial_ok === true || p.commercial_ok === false);
+  add('openai_compatible', verified, (p) => p.openai_compatible === true || p.openai_compatible === false);
+  add('model_tier', verifiedTextNotTrial, (p) => typeof p.model_tier === 'number');
+  add('free_limits', verifiedTextNotTrial, (p) => p.free_limits !== null && p.free_limits !== undefined);
+  add('models_free', verifiedText, (p) => Array.isArray(p.models_free) && p.models_free.length > 0);
+  add('data_policy', verifiedText, (p) => p.data_policy !== null && p.data_policy !== undefined);
+  return out;
+};
+
+test('/coverage/ shows, for every field, counts that match a separate recount from the data', () => {
+  run(['scripts/build.mjs']);
+  const { providers } = JSON.parse(readFileSync(DATA, 'utf8'));
+  const html = readFileSync(join(ROOT, 'site/coverage/index.html'), 'utf8');
+  const expected = coverageByHand(providers);
+  const labels = {
+    card_required: 'Credit card required?', phone_required: 'Phone verification required?', commercial_ok: 'Commercial use allowed?',
+    openai_compatible: 'OpenAI-compatible endpoint?', model_tier: 'Model quality tier', free_limits: 'Published free limits',
+    models_free: 'Free model sample', data_policy: 'Data policy',
+  };
+  for (const [key, e] of Object.entries(expected)) {
+    const m = html.match(new RegExp('<span class="cov-label">' + labels[key].replace(/[?]/g, '\\?') + '[^<]*</span>[\\s\\S]*?<td class="num">(\\d+) of (\\d+)</td><td class="num">(\\d+)%</td><td class="num">(\\d+)</td>'));
+    assert.ok(m, `${key}: its row is on the page`);
+    assert.deepEqual([+m[1], +m[2], +m[4]], [e.confirmed, e.total, e.open], `${key}: confirmed, total and open match the recount`);
+    assert.equal(+m[3], e.total ? Math.round((100 * e.confirmed) / e.total) : 0, `${key}: the share is the rounded percentage`);
+  }
+  assert.match(html, /verified text LLMs that are not one-time trial credits/, 'the population of model_tier and free_limits is stated');
+  assert.match(html, /all verified providers/);
+});
+
+test('/coverage/ has one task row per open gap, each with the official docs and a prefilled issue', () => {
+  const { providers } = JSON.parse(readFileSync(DATA, 'utf8'));
+  const html = readFileSync(join(ROOT, 'site/coverage/index.html'), 'utf8');
+  const gaps = Object.values(coverageByHand(providers)).reduce((n, e) => n + e.open, 0);
+  const rows = html.match(/<li class="cov-task">[\s\S]*?<\/li>/g) || [];
+  assert.equal(rows.length, gaps, 'the number of task rows is the sum of the gaps');
+  const docs = new Map(providers.map((p) => [p.name, p.docs_url]));
+  for (const row of rows) {
+    assert.match(row, /href="\.\.\/p\/[a-z0-9-]+"/, 'the provider links to its page');
+    assert.match(row, /https:\/\/github\.com\/pacocartones\/free-llm-api-hub\/issues\/new\?template=inaccuracy\.yml&amp;provider=[a-z0-9-]+&amp;title=/, 'a prefilled issue of the existing template');
+    const name = row.match(/<a href="\.\.\/p\/[^"]+">([^<]*)<\/a>/)[1].replace(/&amp;/g, '&');
+    const url = docs.get(name);
+    assert.ok(url && row.includes(`href="${url.replace(/&/g, '&amp;')}"`), `${name}: the row links the provider's own docs_url`);
+  }
+  // an unknown value reads "not confirmed", never "no": every open group says so, and no task row states a value
+  const summaries = html.match(/<summary>[\s\S]*?<\/summary>/g) || [];
+  assert.ok(summaries.length >= 1, 'there are open groups');
+  assert.ok(summaries.every((x) => /not confirmed/.test(x)), 'every open group says not confirmed');
+  assert.ok(rows.every((r) => !/\b(yes|no)\b/i.test(r.replace(/<a href="\.\.\/p\/[^"]*">[^<]*<\/a>/, '').replace(/<[^>]+>/g, ' ').replace(/official docs|propose the value/g, ''))), 'a task row never states a value, only that it is open');
+});
+
+test('/coverage/ escapes hostile provider text and refuses a non-http docs link', () => {
+  const evil = { slug: 'evil', name: '<img src=x onerror=alert(1)>', docs_url: 'javascript:alert(1)', verified: true, is_text_llm: true, free_type: 'perpetual', card_required: null };
+  const rows = [{ key: 'card_required', label: 'Credit card required?', population: 'all verified providers', total: 1, confirmed: 0, open: [evil] }];
+  const out = coverageMainHtml(rows, { repo: 'https://github.com/o/r', generated: '2026-10-13', prefix: '../' });
+  assert.ok(!out.includes('<img'), 'the name cannot open a tag');
+  assert.ok(out.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assert.ok(!/href="javascript:/i.test(out), 'a javascript: docs link is never an href');
+  assert.match(out, /no official docs link/);
+  assert.equal(coverageOf([{ ...evil, verified: false }]).every((r) => r.total === 0), true, 'an unverified provider counts in no population');
+});
+
+test('/coverage/ says how to propose one value, is in the sitemap with an absolute canonical and is linked from both footers', () => {
+  run(['scripts/build.mjs']);
+  const html = readFileSync(join(ROOT, 'site/coverage/index.html'), 'utf8');
+  assert.match(html, /one value with its source/);
+  assert.match(html, /CONTRIBUTING\.md/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/freellmapihub\.com\/coverage\/">/);
+  assert.match(readFileSync(join(ROOT, 'site/sitemap.xml'), 'utf8'), /<loc>https:\/\/freellmapihub\.com\/coverage\/<\/loc>/);
+  assert.match(readFileSync(join(ROOT, 'site/index.html'), 'utf8'), /<a href="coverage\/">Data coverage<\/a>/, 'the hand-written home footer');
+  assert.match(readFileSync(join(ROOT, 'site/p/groq.html'), 'utf8'), /<a href="\.\.\/coverage\/">Data coverage<\/a>/, 'the shared footer of a generated page');
+});
+
+// ---- Hacktoberfest banner on the home (F8) --------------------------------
+// The banner is hand-written in site/index.html and removed by site/site.js
+// once its data-until day (UTC, inclusive) has passed. The build stays
+// deterministic: no clock is read at build time.
+function runSiteJsAt(isoNow) {
+  const src = readFileSync(join(ROOT, 'site/site.js'), 'utf8');
+  let removed = false;
+  const banner = {
+    getAttribute: (k) => (k === 'data-until' ? '2026-10-31' : null),
+    remove: () => { removed = true; },
+  };
+  const fakeDocument = {
+    documentElement: { getAttribute: () => 'dark', setAttribute() {} },
+    getElementById: (id) => (id === 'event-banner' ? banner : null),
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener() {},
+  };
+  const RealDate = Date;
+  const now = RealDate.parse(isoNow);
+  class FakeDate extends RealDate {
+    static now() { return now; }
+  }
+  FakeDate.parse = RealDate.parse;
+  new Function('document', 'window', 'localStorage', 'navigator', 'Date', src)(
+    fakeDocument, {}, { getItem: () => null, setItem() {} }, {}, FakeDate,
+  );
+  return removed;
+}
+
+test('home: the Hacktoberfest banner exists, links to /coverage/ and to what gets merged, and has no clock at build time', () => {
+  const index = readFileSync(join(ROOT, 'site/index.html'), 'utf8');
+  assert.equal(index.split('id="event-banner"').length - 1, 1, 'exactly one banner');
+  assert.match(index, /id="event-banner" data-until="2026-10-31"/);
+  const banner = index.slice(index.indexOf('<aside class="event-banner"'), index.indexOf('</aside>'));
+  assert.match(banner, /href="coverage\/"/, 'links to the coverage page');
+  assert.match(banner, /CONTRIBUTING\.md#hacktoberfest/, 'links to the contributing section that says what gets merged and closed');
+  assert.ok(existsSync(join(ROOT, 'site/coverage/index.html')), 'the coverage page it links to exists');
+  assert.doesNotMatch(readFileSync(join(ROOT, 'scripts/build.mjs'), 'utf8'), /event-banner/, 'the build must not read a clock to decide the banner');
+});
+
+test('home: site.js keeps the banner through 31 October (UTC) and removes it from 1 November', () => {
+  assert.equal(runSiteJsAt('2026-10-13T00:00:00Z'), false, 'mid October: banner stays');
+  assert.equal(runSiteJsAt('2026-10-31T23:59:58Z'), false, 'last second of 31 October: banner stays');
+  assert.equal(runSiteJsAt('2026-10-31T23:59:59.999Z'), false, 'last millisecond of 31 October: banner stays');
+  assert.equal(runSiteJsAt('2026-11-01T00:00:00Z'), true, '1 November: banner is removed');
+  assert.equal(runSiteJsAt('2027-02-01T12:00:00Z'), true, 'later: banner is removed');
 });

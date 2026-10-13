@@ -1,0 +1,42 @@
+name: OpenSSF Scorecard
+
+on:
+  # Weekly, plus every push to main, so the public score follows the repository.
+  schedule:
+    - cron: "27 4 * * 1"
+  push:
+    branches: [main]
+  # Re-run on changes to branch protection, which Scorecard scores.
+  branch_protection_rule:
+  workflow_dispatch:
+
+# Read-only at workflow level; the Scorecard job gets the two write scopes it needs.
+# Publishing requires no top-level env, defaults or write permissions.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload the SARIF results to code scanning.
+      security-events: write
+      # OIDC token that authenticates the published results (badge and public API).
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload results to code scanning
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: results.sarif

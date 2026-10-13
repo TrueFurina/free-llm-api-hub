@@ -1,7 +1,7 @@
 {
   "$schema": "./schema.json",
-  "version": "2.10.0",
-  "generated": "2026-10-09",
+  "version": "2.11.0",
+  "generated": "2026-10-13",
   "source": "https://github.com/pacocartones/free-llm-api-hub",
   "note": "Canonical dataset. README tables, badge-freshness.json and the interactive site are all generated from this file — do not hand-edit them. `verified: true` means the core facts (tier, limits, key catch, link) were independently confirmed against the provider's own docs on `last_verified`. `verified: false` means sourced from community tracking and not yet independently re-confirmed here — treat those as indicative. Attribute fields (openai_compatible, modalities, best_for) are progressively backfilled and may be null.",
   "providers": [
@@ -28,7 +28,8 @@
       "model_tier": 3,
       "model_tier_source": {"model":"gemini-2.5-pro","arena_model":"gemini-2.5-pro","match":"exact","rating":1445.6,"ci":[1443.1,1448],"boundary":true,"votes":124834,"snapshot":"2026-10-02","url":"https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset"},
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":true,"retention":null,"source":"https://ai.google.dev/gemini-api/terms","checked":"2026-10-13"}
     },
     {
       "slug": "groq",
@@ -54,7 +55,8 @@
       "model_tier_source": {"model":"qwen/qwen3.8-27b","arena_model":"qwen3.8-27b","match":"variant","rating":1437.7,"ci":[1432.3,1443.1],"votes":18462,"snapshot":"2026-10-02","url":"https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset"},
       "free_limits": {"requests_per_minute":30,"requests_per_day":1000,"tokens_per_day":200000,"scope":"free plan, each of openai/gpt-oss-120b, openai/gpt-oss-20b and qwen/qwen3.8-27b; limits vary by model","source":"https://console.groq.com/docs/rate-limits","checked":"2026-10-08"},
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":null,"retention":"Not retained by default; logged up to 30 days only for reliability or abuse checks","source":"https://console.groq.com/docs/your-data","checked":"2026-10-13"}
     },
     {
       "slug": "openrouter",
@@ -106,7 +108,8 @@
       "model_tier_source": {"model":"@cf/google/gemma-3-12b-it","arena_model":"gemma-3-12b-it","match":"exact","rating":1341.8,"ci":[1332.2,1351.3],"boundary":true,"votes":3829,"snapshot":"2026-10-02","url":"https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset"},
       "free_limits": {"requests_per_minute":300,"scope":"text generation; models that require Workers Paid: 20 requests/minute per model. The daily allowance is 10,000 Neurons, a unit that is not requests or tokens","source":"https://developers.cloudflare.com/workers-ai/platform/limits/","checked":"2026-10-08"},
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://developers.cloudflare.com/workers-ai/platform/data-usage/","checked":"2026-10-13"}
     },
     {
       "slug": "cohere",
@@ -156,7 +159,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://www.cerebras.ai/terms-of-service","checked":"2026-10-13"}
     },
     {
       "slug": "mistral",
@@ -180,7 +184,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":true,"retention":null,"source":"https://help.mistral.ai/en/articles/347617-do-you-use-my-user-data-to-train-your-artificial-intelligence-models","checked":"2026-10-12"}
     },
     {
       "slug": "huggingface",
@@ -327,7 +332,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":"Prompt and generation data for open models not logged or stored without opt-in","source":"https://fireworks.ai/privacy-policy","checked":"2026-10-13"}
     },
     {
       "slug": "baseten",
@@ -375,7 +381,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":true,"retention":null,"source":"https://docs.nebius.com/legal/token-factory","checked":"2026-10-13"}
     },
     {
       "slug": "novita",
@@ -399,7 +406,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://novita.ai/legal/terms-of-service","checked":"2026-10-13"}
     },
     {
       "slug": "ai21",
@@ -494,7 +502,8 @@
       "is_text_llm": false,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://modal.com/legal/terms","checked":"2026-10-13"}
     },
     {
       "slug": "sambanova",
@@ -544,7 +553,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":"Inputs and outputs not collected, except briefly for errors or abuse; anonymized usage data up to 6 months","source":"https://www.scaleway.com/en/docs/generative-apis/reference-content/data-privacy/","checked":"2026-10-13"}
     },
     {
       "slug": "nvidia-nim",
@@ -616,7 +626,8 @@
       "is_text_llm": false,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://jina.ai/embeddings/","checked":"2026-10-13"}
     },
     {
       "slug": "deepgram",
@@ -746,7 +757,7 @@
       "free_type": "renewing-quota",
       "free_tier": "$0 Free plan: starter amount of cloud usage credits, limited to a smaller set of starter models; buying credits unlocks all cloud models",
       "rate_limits": "1 concurrent request on the free plan; included usage resets monthly from signup date (dollar amount of starter credits not published)",
-      "notes": "First-party — Ollama hosts the cloud models. Requires an ollama.com account + API key. The old 5-hour session / weekly limits are gone: usage is now credit-based with a monthly reset; Pro ($20/mo) includes $60 of credits. Prompts/responses are not logged or trained on. Whether a card is required is not stated on the current pricing page.",
+      "notes": "First-party — Ollama hosts the cloud models. Requires an ollama.com account + API key. The old 5-hour session / weekly limits are gone: usage is now credit-based with a monthly reset; Pro ($20/mo) includes $60 of credits. Per its cloud page, Ollama does not use cloud prompts and responses to train models; the page says nothing about logging or retention. Whether a card is required is not stated on the current pricing page.",
       "best_for": "Cloud-hosted open models with the Ollama workflow",
       "modalities": ["text", "vision"],
       "models_free": null,
@@ -761,7 +772,8 @@
       "is_text_llm": true,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://docs.ollama.com/cloud","checked":"2026-10-12"}
     },
     {
       "slug": "ai-horde",
@@ -1003,7 +1015,8 @@
       "is_text_llm": false,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":"No longer than necessary to provide the Service","source":"https://moondream.ai/terms","checked":"2026-10-12"}
     },
     {
       "slug": "speechmatics",
@@ -1027,7 +1040,8 @@
       "is_text_llm": false,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://www.speechmatics.com/terms-and-conditions","checked":"2026-10-13"}
     },
     {
       "slug": "speechify",
@@ -1196,7 +1210,8 @@
       "is_text_llm": false,
       "model_tier": null,
       "verified": true,
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-08",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://www.rime.ai/terms","checked":"2026-10-13"}
     },
     {
       "slug": "tencent-hunyuan",
@@ -1558,7 +1573,8 @@
       "model_tier": null,
       "verified": true,
       "last_verified": "2026-10-08",
-      "added": "2026-07-31"
+      "added": "2026-07-31",
+      "data_policy": {"trains_on_prompts":false,"retention":null,"source":"https://smallest.ai/terms-of-service","checked":"2026-10-13"}
     },
     {
       "slug": "retell-ai",

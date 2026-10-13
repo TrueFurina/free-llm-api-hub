@@ -108,6 +108,15 @@
           "type": "boolean",
           "description": "True when the free offering (free tier or trial credit) gives API access to text/chat language models. False for OCR, text-to-speech, speech-to-text, embeddings-only, image and compute-only services. Explicit on every entry; it makes an entry eligible for the top 10."
         },
+        "partner": {
+          "type": "boolean",
+          "description": "True when the provider has a commercial or sponsorship relationship with this project. It never changes a score or a rank. A partner can appear only on the /best podium (ranks 1 to 3), marked as a partner; one ranked 4 to 10 fails validation. Absent means not a partner."
+        },
+        "partner_note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The public note about the relationship, shown next to the Partner label on the podium. Required when partner is true."
+        },
         "model_tier": {
           "type": ["integer", "null"],
           "minimum": 0,
@@ -158,6 +167,18 @@
             "source": { "type": "string", "format": "uri", "description": "The provider's own page that says it." },
             "checked": { "type": "string", "format": "date", "description": "The day the passage was read on that page." },
             "quote": { "type": "string", "minLength": 1, "maxLength": 300, "description": "The passage, as the page words it (a sentence, not a paragraph)." }
+          }
+        },
+        "data_policy": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["source", "checked"],
+          "description": "What the provider itself says about your prompts on this free access: whether it trains on them and how long it keeps them. Absent or null means nobody has recorded it, never that the answer is no. At least one of trains_on_prompts and retention is set; a part the provider does not state stays null.",
+          "properties": {
+            "trains_on_prompts": { "type": ["boolean", "null"], "description": "true = the provider says it may train on prompts and outputs of this free access (even if you can opt out); false = it says it does not; null = not stated." },
+            "retention": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "description": "How long prompts are kept, as the provider words it (for example \"30 days\" or \"not stored\"); null = not stated." },
+            "source": { "type": "string", "format": "uri", "description": "The provider's own page that states it." },
+            "checked": { "type": "string", "format": "date", "description": "The day the page was read." }
           }
         },
         "verified": {

@@ -1,0 +1,58 @@
+name: Issue assignment
+
+# "/take" in an issue comment assigns the commenter, "/release" unassigns them.
+# Issues labelled both "good first issue" and "data" are not assigned: the first
+# correct pull request wins. Runs on comments only; no code from the repository
+# is checked out.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: issue-assign-${{ github.event.issue.number }}
+
+jobs:
+  assign:
+    if: ${{ !github.event.issue.pull_request && github.event.issue.state == 'open' && github.event.comment.user.type == 'User' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Handle /take and /release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          AUTHOR: ${{ github.event.comment.user.login }}
+          BODY: ${{ github.event.comment.body }}
+          LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
+          ASSIGNEES: ${{ toJSON(github.event.issue.assignees.*.login) }}
+        run: |
+          set -u
+          cmd=$(printf '%s\n' "$BODY" | head -n 1 | tr -d '\r' | awk '{print tolower($1)}')
+          say() { gh issue comment "$ISSUE" --repo "$REPO" --body "$1" >/dev/null; }
+          case $cmd in
+            /take)
+              if jq -e 'index("good first issue") and index("data")' <<<"$LABELS" >/dev/null; then
+                say "@$AUTHOR no need to claim this one: open a pull request when it's ready. The first correct, sourced PR is merged."
+              elif jq -e --arg a "$AUTHOR" 'index($a)' <<<"$ASSIGNEES" >/dev/null; then
+                exit 0
+              elif [ "$(jq length <<<"$ASSIGNEES")" -gt 0 ]; then
+                say "@$AUTHOR this issue is already assigned to @$(jq -r '.[0]' <<<"$ASSIGNEES"). Any other issue labelled \`good first issue\` without an assignee is free."
+              else
+                open=$(gh issue list --repo "$REPO" --assignee "$AUTHOR" --state open --json number --jq length)
+                if [ "$open" -ge 2 ]; then
+                  say "@$AUTHOR you already have $open open issues assigned. Finish or /release one of them first."
+                else
+                  gh issue edit "$ISSUE" --repo "$REPO" --add-assignee "$AUTHOR" >/dev/null
+                  say "@$AUTHOR assigned to you. If you can't continue, comment \`/release\`; an assigned issue with no activity for two weeks may be offered to someone else after a ping."
+                fi
+              fi ;;
+            /release)
+              if jq -e --arg a "$AUTHOR" 'index($a)' <<<"$ASSIGNEES" >/dev/null; then
+                gh issue edit "$ISSUE" --repo "$REPO" --remove-assignee "$AUTHOR" >/dev/null
+                say "@$AUTHOR released, thanks for saying so. The issue is free again."
+              fi ;;
+          esac

@@ -48,3 +48,6 @@ site/shared-sort.js
 # Provider compare view (#175): static /compare/ pages and the shared table renderer, emitted by build.mjs from scripts/lib/compare.mjs
 site/compare/
 site/shared-compare.js
+
+# Lighthouse runner dependencies (installed by CI from tools/lighthouse/package-lock.json)
+tools/lighthouse/node_modules/

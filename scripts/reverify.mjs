@@ -99,6 +99,7 @@ for (const p of batch) {
     `- flags: card=${p.card_required} phone=${p.phone_required} commercial=${p.commercial_ok} openai=${p.openai_compatible}`,
     `- best_for: ${p.best_for || ''}`,
     `- expires: ${p.expires || ''}`,
+    ...(p.data_policy ? [`- data_policy: trains_on_prompts=${p.data_policy.trains_on_prompts} retention=${p.data_policy.retention || ''} (${p.data_policy.source}, read ${p.data_policy.checked}): read it again`] : []),
     ...(p.no_expiry ? [`- no_expiry: the provider said "${p.no_expiry.quote}" (${p.no_expiry.source}, read ${p.no_expiry.checked}): read it again`] : []),
     '',
     '## Provider docs (extracted text)',

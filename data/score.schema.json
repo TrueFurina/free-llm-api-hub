@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freellmapihub.com/api/v1/score.schema.json",
+  "title": "Free LLM API Hub score (/api/v1/score.json)",
+  "description": "The FLLMAPIHUB score of every eligible provider, with its parts. Contract v1: fields are only added within v1, so consumers must ignore fields they do not know; a field named here is never renamed, removed or retyped in v1.",
+  "type": "object",
+  "required": ["dataset", "version", "generated", "schema", "method", "weights", "editorial_default", "editorial_neutral", "min_confirmed", "top_size", "podium_size", "count", "providers"],
+  "properties": {
+    "dataset": { "const": "free-llm-api-hub" },
+    "version": { "type": "string", "description": "The dataset release version (SemVer), the same as in every other file of /api/v1/." },
+    "generated": { "type": "string", "format": "date", "description": "The date of the last dataset change. The scores are computed at this date, so the file is byte-stable for a given dataset." },
+    "license": { "type": "string" },
+    "homepage": { "type": "string", "format": "uri" },
+    "docs": { "type": "string", "format": "uri" },
+    "description": { "type": "string" },
+    "schema": { "type": "string", "format": "uri", "description": "The URL of this schema." },
+    "method": { "type": "string", "format": "uri", "description": "The public page that explains how the score works." },
+    "weights": {
+      "type": "object",
+      "description": "The points each part can add, out of 100 in total.",
+      "required": ["quality", "limits", "friction", "commercial", "openai", "stability", "editorial"],
+      "properties": {
+        "quality": { "type": "integer", "minimum": 0 },
+        "limits": { "type": "integer", "minimum": 0 },
+        "friction": { "type": "integer", "minimum": 0 },
+        "commercial": { "type": "integer", "minimum": 0 },
+        "openai": { "type": "integer", "minimum": 0 },
+        "stability": { "type": "integer", "minimum": 0 },
+        "editorial": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "editorial_default": { "type": "integer", "description": "The editorial points a provider gets when it has no rating of its own." },
+    "editorial_neutral": { "type": "boolean", "description": "True while every provider carries the editorial default, so the editorial part moves no position." },
+    "min_confirmed": { "type": "integer", "minimum": 0, "description": "How many of the six mathematical inputs must be confirmed for a provider to enter the top." },
+    "top_size": { "type": "integer", "minimum": 1, "description": "The most providers the top holds." },
+    "podium_size": { "type": "integer", "minimum": 1 },
+    "count": { "type": "integer", "minimum": 0, "description": "The number of providers listed; equals the length of providers." },
+    "providers": {
+      "type": "array",
+      "description": "Every eligible provider (verified and inside the freshness window), best score first; ties break by the mathematical score, then by name.",
+      "items": {
+        "type": "object",
+        "required": ["slug", "name", "is_text_llm", "score", "math", "editorial", "confirmed", "of", "parts", "meets_minimum", "in_top", "top_rank", "tier_near_threshold"],
+        "properties": {
+          "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "is_text_llm": { "type": "boolean" },
+          "score": { "type": "number", "minimum": 0, "maximum": 100, "description": "The total, one decimal." },
+          "math": { "type": "number", "minimum": 0, "description": "The mathematical points, one decimal." },
+          "editorial": { "type": "number", "minimum": 0, "description": "The editorial points after the cap, one decimal." },
+          "confirmed": { "type": "integer", "minimum": 0, "description": "How many of the mathematical inputs the data confirms." },
+          "of": { "type": "integer", "minimum": 1, "description": "How many mathematical inputs there are." },
+          "parts": {
+            "type": "object",
+            "description": "The points of each mathematical input, one decimal.",
+            "required": ["quality", "limits", "friction", "commercial", "openai", "stability"],
+            "properties": {
+              "quality": { "type": "number", "minimum": 0 },
+              "limits": { "type": "number", "minimum": 0 },
+              "friction": { "type": "number", "minimum": 0 },
+              "commercial": { "type": "number", "minimum": 0 },
+              "openai": { "type": "number", "minimum": 0 },
+              "stability": { "type": "number", "minimum": 0 }
+            }
+          },
+          "meets_minimum": { "type": "boolean", "description": "True when confirmed reaches min_confirmed." },
+          "in_top": { "type": "boolean", "description": "True when the provider is in the top (a text-LLM provider that meets the minimum and ranks within top_size)." },
+          "top_rank": { "type": ["integer", "null"], "minimum": 1, "description": "The place in the top, or null when the provider is not in it." },
+          "tier_near_threshold": { "type": "boolean", "description": "True when the model-quality tier is near a threshold and could change at the next snapshot; the score keeps it as it is." }
+        }
+      }
+    }
+  }
+}

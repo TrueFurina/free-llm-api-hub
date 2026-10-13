@@ -5,6 +5,13 @@
 // check only that slugs resolve and are unique, so an unverified (or copy-empty)
 // pick would silently ship as "best" — a credibility bug. This is the one place
 // those rules live: the validator, check-best.mjs, and the test suite all call them.
+//
+// The /best top 10 itself is computed by lib/score.mjs (topEntries below); data/best.json
+// only keeps the page texts and the picks the static /compare/ pages are built from.
+
+import { topProviders } from './score.mjs';
+
+export const PODIUM_SIZE = 3;
 
 /**
  * Return every integrity violation in `best` against `providers`.
@@ -58,4 +65,24 @@ export function resolveBestEntries(best, providers) {
   assertBestPicks(best, providers);
   const bySlug = new Map(providers.map((p) => [p.slug, p]));
   return best.entries.map((e, i) => ({ rank: i + 1, ...e, p: bySlug.get(e.slug) }));
+}
+
+/** The top 10 as [{ rank, podium, p, ...score }], computed from the data; never padded. */
+export function topEntries(providers, opts = {}) {
+  return topProviders(providers, opts).map((r, i) => ({ ...r, rank: i + 1, podium: i < PODIUM_SIZE, p: r.provider }));
+}
+
+/**
+ * Partner rules for a top: a partner may appear only on the podium, and there it must carry a public
+ * note. Being a partner never moves a score (lib/score.mjs does not read it), so these are only about
+ * where it may show. Does not throw.
+ */
+export function partnerErrors(top) {
+  const errors = [];
+  for (const e of top) {
+    if (e.p.partner !== true) continue;
+    if (!e.podium) errors.push(`${e.p.slug} is a partner ranked ${e.rank}: a partner can appear only on the podium (ranks 1 to ${PODIUM_SIZE})`);
+    else if (typeof e.p.partner_note !== 'string' || !e.p.partner_note.trim()) errors.push(`${e.p.slug} is a partner on the podium without a partner_note`);
+  }
+  return errors;
 }

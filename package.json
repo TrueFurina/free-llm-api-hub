@@ -1,6 +1,6 @@
 {
   "name": "free-llm-api-hub",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "private": true,
   "description": "A continuously-verified dataset of free-tier and trial-credit LLM API providers for developers.",
   "type": "module",
@@ -14,7 +14,7 @@
     "discover": "node scripts/discover.mjs",
     "probe": "node scripts/probe.mjs",
     "og": "node scripts/og.mjs",
-    "test": "node scripts/validate.mjs && node scripts/check-links.mjs && node --test scripts/build.test.mjs scripts/explorer.test.mjs scripts/best.test.mjs",
+    "test": "node scripts/validate.mjs && node scripts/check-links.mjs && node --test scripts/build.test.mjs scripts/explorer.test.mjs scripts/best.test.mjs scripts/lighthouse-gate.test.mjs scripts/gpu-compute.test.mjs",
     "score": "node scripts/score.mjs",
     "stars": "node scripts/refresh-stars.mjs",
     "check": "node scripts/validate.mjs && node scripts/build.mjs && git diff --exit-code -- README.md collections site/index.html site/sitemap.xml site/robots.txt docs/credit-programs.md CITATION.cff data/probe-report.json badge-verified.json site/badge-verified.json derived-fingerprints.json",

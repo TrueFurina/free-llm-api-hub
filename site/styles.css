@@ -309,7 +309,7 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 .coll-card-head strong { font-family: var(--font-mono); font-size: 1rem; }
 .coll-card .count { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius: 999px; padding: 1px 9px; font-size: .74rem; font-weight: 700; }
 .coll-card p { margin: 0; color: var(--muted); font-size: .88rem; }
-/* /best — editorial top 10 */
+/* /best — the top 10 by score */
 .best-wrap { max-width: 46rem; }
 .best-intro { color: var(--muted); line-height: 1.65; margin: 0 0 26px; max-width: 66ch; }
 .best-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -338,6 +338,31 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 .best-why { margin: 0 0 8px; color: var(--text); line-height: 1.6; }
 .best-meta { margin: 0; color: var(--muted); font-size: .85rem; font-family: var(--font-mono); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .best-note { margin-top: 18px; line-height: 1.6; }
+.best-section { font-size: 1rem; margin: 26px 0 12px; color: var(--muted); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.best-score { font-family: var(--font-mono); font-weight: 700; font-size: .85rem; color: var(--accent); margin-left: auto; }
+.best-editorial, .best-partner { margin: 0 0 8px; color: var(--muted); line-height: 1.55; font-size: .9rem; }
+.best-podium { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.best-podium-1 { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.best-weights { border-collapse: collapse; margin: 0 0 18px; }
+.best-weights th, .best-weights td { text-align: left; padding: 6px 18px 6px 0; border-bottom: 1px solid var(--border); }
+.best-weights .num { text-align: right; font-family: var(--font-mono); padding-right: 0; }
+.best-method { max-width: 46rem; line-height: 1.65; }
+.best-method li { margin-bottom: 8px; }
+/* /coverage/ — the data-coverage task board */
+.cov-table { border-collapse: collapse; width: 100%; margin: 0 0 14px; font-size: .92rem; }
+.cov-table th, .cov-table td { text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.cov-table thead th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+.cov-table .num { text-align: right; font-family: var(--font-mono); white-space: nowrap; padding-right: 0; padding-left: 10px; }
+.cov-field { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin: 0 0 10px; background: var(--panel); }
+.cov-field summary { cursor: pointer; }
+.cov-list { list-style: none; margin: 10px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cov-task { line-height: 1.5; overflow-wrap: anywhere; }
+.cov-pop { display: none; }
+@media (max-width: 640px) {
+  .cov-popcol { display: none; }
+  .cov-pop { display: block; font-weight: 400; font-size: .82rem; color: var(--muted); margin-top: 2px; }
+  .cov-table th, .cov-table td { padding-right: 8px; }
+}
 @media (max-width: 480px) {
   .best-item { grid-template-columns: 2.4rem 1fr; gap: 10px; padding: 14px; }
   .best-rank { font-size: 1.3rem; }
@@ -556,3 +581,9 @@ p.muted a, .prose p a, .prov-summary p a { text-decoration: underline; text-unde
    wraps at the edge when it does not fit; ordinary words and numbers still break only at spaces, and the
    code blocks keep their own horizontal scroll. */
 .prov-card p, p.muted { overflow-wrap: anywhere; }
+
+/* Hacktoberfest banner (home). Removed by site.js after its data-until date (UTC, inclusive). */
+.event-banner { background: var(--panel); border-bottom: 1px solid var(--border); border-left: 3px solid var(--warn); }
+.event-banner-inner { padding-block: 10px; }
+.event-banner p { margin: 0; font-size: 0.9rem; line-height: 1.45; }
+.event-banner a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }

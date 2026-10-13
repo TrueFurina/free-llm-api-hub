@@ -14,6 +14,60 @@ What is *not* guaranteed: the order of providers in a list, the exact contents o
 ### Fields added within v1
 
 - **`no_expiry`** (dataset 2.10.0): an optional object on one-time trial credits whose provider says the credit does not expire — `source`, `checked`, `quote`. It appears in the provider objects the API serves; consumers that ignore unknown fields are unaffected. `expires` keeps its type and meaning (a window such as `"30 days"`, or `null`).
+- **`data_policy`** (dataset 2.11.0): an optional object with `trains_on_prompts` (boolean or `null`), `retention` (string or `null`), `source` and `checked`. Absent or `null` means nobody has recorded it. It appears in the provider objects the API serves; consumers that ignore unknown fields are unaffected.
+
+### The score: `/api/v1/score.json`
+
+[`/api/v1/score.json`](https://freellmapihub.com/api/v1/score.json) is the whole [FLLMAPIHUB score](methodology.md#the-score), not only the top 10 that [`best.json`](https://freellmapihub.com/api/v1/best.json) carries. It lists every eligible provider (verified and inside the freshness window), best score first, with the parts of the score and how many of its inputs the data confirms. The numbers are the same as in `best.json` (one rounding rule, one source), and the file is byte-stable for a given dataset: the scores are computed at `generated`.
+
+Its contract is **v1** and is described by a JSON Schema at a stable URL, [`/api/v1/score.schema.json`](https://freellmapihub.com/api/v1/score.schema.json) (the source is [`data/score.schema.json`](../data/score.schema.json)). The file names it in `schema`. The rules above apply: a field named below is never renamed, removed or retyped within v1, new fields may be added, so read only the fields you need and ignore the rest; a breaking change goes to `/api/v2/`.
+
+Top level:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `dataset`, `version`, `generated`, `license`, `homepage`, `docs`, `description` | | the same envelope as every other file of the API |
+| `schema` | URL | the URL of the JSON Schema of this file |
+| `method` | URL | the public page that explains how the score works |
+| `weights` | object | the points each part can add (`quality`, `limits`, `friction`, `commercial`, `openai`, `stability`, `editorial`), out of 100 in total |
+| `editorial_default` | integer | the editorial points a provider gets without a rating of its own |
+| `editorial_neutral` | boolean | true while every provider carries that default, so the editorial part moves no position |
+| `min_confirmed` | integer | how many of the mathematical inputs must be confirmed to enter the top |
+| `top_size`, `podium_size` | integer | the most providers the top holds, and how many form the podium |
+| `count` | integer | the number of providers listed |
+| `providers` | array | one object per eligible provider, as below |
+
+Each object of `providers`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `slug`, `name` | string | the provider |
+| `is_text_llm` | boolean | whether the free access gives text-LLM API access, which the top requires |
+| `score` | number | the total out of 100, one decimal |
+| `math`, `editorial` | number | the mathematical points and the editorial points after the cap, one decimal |
+| `confirmed`, `of` | integer | how many of the mathematical inputs the data confirms, out of how many exist |
+| `parts` | object | the points of each mathematical input (`quality`, `limits`, `friction`, `commercial`, `openai`, `stability`), one decimal |
+| `meets_minimum` | boolean | true when `confirmed` reaches `min_confirmed` |
+| `in_top` | boolean | true when the provider is in the top |
+| `top_rank` | integer or null | its place in the top, or `null` |
+| `tier_near_threshold` | boolean | true when the model-quality tier is near a threshold and could change at the next snapshot; the score keeps it as it is |
+
+A provider with few confirmed inputs still appears, with a low `confirmed`: missing information scores zero or neutral and is never estimated. A provider that is not verified, or is past the freshness window, is not listed. Being a partner is not a field here: the score never reads it.
+
+```json
+{
+  "dataset": "free-llm-api-hub",
+  "schema": "https://freellmapihub.com/api/v1/score.schema.json",
+  "min_confirmed": 4,
+  "providers": [
+    { "slug": "example", "name": "Example", "is_text_llm": true, "score": 67.2, "math": 52.2, "editorial": 15, "confirmed": 5, "of": 6,
+      "parts": { "quality": 22, "limits": 4.2, "friction": 13, "commercial": 9, "openai": 4, "stability": 0 },
+      "meets_minimum": true, "in_top": true, "top_rank": 1, "tier_near_threshold": false }
+  ]
+}
+```
+
+(abridged: the real file carries every field of the tables above.)
 
 ### Generated client configs
 

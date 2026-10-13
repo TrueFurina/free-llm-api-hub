@@ -113,7 +113,7 @@ export function parseCompareSlugs(search, known) {
 
 /**
  * The side-by-side table: one column per provider, one row per dataset field.
- * `opts.prefix` is the path from the page to the site root (provider links).
+ * `opts.prefix` is the path from the page to the site root (provider links); `opts.scores` adds the score rows.
  */
 export function compareTableHtml(list, opts = {}) {
   const prefix = (opts && opts.prefix) || '';
@@ -141,6 +141,22 @@ export function compareTableHtml(list, opts = {}) {
       ? `<span class="v ok">${cell(p.last_verified)}</span>`
       : '<span class="v warn">unverified</span>'],
   ];
+  // With a scores map ({ slug: { total, confirmed, of, rank } }) the table also shows the score and the model quality
+  // tier it is built from. Without one (a bare call) the table is the same as before.
+  const scores = opts && opts.scores;
+  if (scores) {
+    const scoreCell = (p) => {
+      const sc = scores[p.slug];
+      if (!sc) return '<span class="tri tri-unk">not scored</span>';
+      return `<strong>${cell(Number(sc.total).toFixed(1))}</strong> / 100` +
+        `<div class="cmp-sub">${cell(sc.confirmed)} of ${cell(sc.of)} inputs confirmed · ` +
+        (sc.rank ? `<a href="${prefix}best/">#${cell(sc.rank)} in the top 10</a>` : 'not in the top 10') + '</div>';
+    };
+    const tierCell = (p) => (Number.isInteger(p.model_tier)
+      ? `${cell(p.model_tier)} of 4` + (p.model_tier_source && p.model_tier_source.boundary === true ? '<div class="cmp-sub">near a threshold</div>' : '')
+      : '<span class="tri tri-unk">not rated</span>');
+    fields.unshift(['Score', scoreCell], ['Model quality tier', tierCell]);
+  }
   const head = list.map((p) => {
     const name = SLUG_RE.test(String(p.slug || ''))
       ? `<a href="${prefix}p/${p.slug}">${cell(p.name)}</a>`

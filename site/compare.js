@@ -10,6 +10,7 @@
   if (!C || !form || !out) return;
   var selects = Array.prototype.slice.call(form.querySelectorAll('select[name="p"]'));
   var DATA = [];
+  var SCORES = null;
 
   function message(text) {
     out.textContent = '';
@@ -31,7 +32,8 @@
     var list = slugs.map(function (s) { return DATA.find(function (p) { return p.slug === s; }); }).filter(Boolean);
     history.replaceState(null, '', slugs.length ? '?compare=' + slugs.join(',') : location.pathname);
     if (list.length < C.COMPARE_MIN) { message('Pick at least ' + C.COMPARE_MIN + ' providers to compare.'); return; }
-    out.innerHTML = C.compareTableHtml(list, { prefix: '../' });
+    var opts = SCORES ? { prefix: '../', scores: SCORES } : { prefix: '../' };
+    out.innerHTML = C.compareTableHtml(list, opts);
   }
 
   function fill(slugs) {
@@ -41,7 +43,13 @@
   form.addEventListener('submit', function (e) { e.preventDefault(); show(selected()); });
   selects.forEach(function (s) { s.addEventListener('change', function () { show(selected()); }); });
 
-  fetch('../providers.json')
+  // The scores are an addition: if they cannot load, the table still renders without the score rows.
+  var scoresReq = fetch('../scores.json')
+    .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+    .then(function (d) { SCORES = (d && d.scores) || null; })
+    .catch(function () { SCORES = null; });
+
+  scoresReq.then(function () { return fetch('../providers.json'); })
     .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
     .then(function (d) {
       DATA = (d && d.providers) || [];

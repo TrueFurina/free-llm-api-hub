@@ -18,7 +18,9 @@ import { mineHistoryAndSnapshots, HISTORY_FIELDS } from './lib/history.mjs';
 import { flattenFieldChanges, groupChangesByWeek, changesRss, weekTitle, formatValue, reportChangeUrl } from './lib/changes.mjs';
 import { monthlyReport, reportMonths, monthEndDate } from './lib/state.mjs';
 import { githubProfileUrl } from './lib/contributors.mjs';
-import { resolveBestEntries } from './lib/best.mjs';
+import { resolveBestEntries, topEntries, partnerErrors, PODIUM_SIZE } from './lib/best.mjs';
+import { coverage, coverageMainHtml } from './lib/coverage.mjs';
+import { SCORE_WEIGHTS, EDITORIAL_WEIGHT, EDITORIAL_DEFAULT, MATH_INPUTS, MIN_CONFIRMED, TOP_SIZE, EDITORIAL_NOTE_THRESHOLD, STABILITY_MIN_DAYS, STABILITY_MIN_SAMPLES, rankProviders, editorialRating } from './lib/score.mjs';
 import { openaiClients, litellmYaml } from './lib/client-config.mjs';
 import * as compareLib from './lib/compare.mjs';
 import { requirementsHtml, limitsHtml, glanceHtml, modelsHtml, dataPolicyHtml } from './lib/provider-sections.mjs';
@@ -94,17 +96,18 @@ function trialTable(rows) {
   return `${head}\n${body}`;
 }
 
-// The single README table: the editorial top 20, in rank order. The tag is the
-// short "why it's here"; the full editorial write-up lives on the /best page.
+// The single README table: the top 10 by the FLLMAPIHUB score, in rank order. The score and
+// how many of its six inputs are confirmed sit next to the name; the method is on /best/methodology/.
 function bestTable(entries) {
   const head =
-    '| Provider | What\'s free | The catch | Verified |\n' +
-    '|---|---|---|---|';
+    '| # | Provider | Score | What\'s free | The catch | Verified |\n' +
+    '|---|---|---|---|---|---|';
   const body = entries
-    .map(({ p, tag }) => {
+    .map((e) => {
+      const { p } = e;
       const label = p.docs_url ? `**[${esc(p.name)}](${p.docs_url})**` : `**${esc(p.name)}**`;
-      const tagLine = tag ? `<br><sub>🏆 ${esc(tag)}</sub>` : '';
-      return `| ${label}${tagLine}${flags(p)} | ${esc(p.free_tier)} | ${esc(p.notes)} | ${verifiedCell(p)} |`;
+      const partner = e.podium && p.partner === true ? `<br><sub>🤝 Partner: ${esc(p.partner_note)}</sub>` : '';
+      return `| ${e.rank} | ${label}${partner}${flags(p)} | ${e.total.toFixed(1)}<br><sub>${e.confirmed} of ${e.of} inputs</sub> | ${esc(p.free_tier)} | ${esc(p.notes)} | ${verifiedCell(p)} |`;
     })
     .join('\n');
   return `${head}\n${body}`;
@@ -442,7 +445,7 @@ const siteFooter = (p) => `<footer class="site-footer"><div class="wrap footer-t
 <div class="footer-brand"><a class="foot-brand-link" href="${p}" aria-label="Free LLM API Hub — home"><svg class="logo-mark"><use href="#logo"/></svg><span class="brand-name">Free LLM API <span class="grad">Hub</span></span></a><p>The <strong>continuously-verified</strong>, <strong>machine-readable</strong> dataset of <strong>free LLM &amp; AI-model APIs</strong> and <strong>trial credits</strong> — every entry <strong>dated</strong>, <strong>sourced</strong>, and <strong>free of dead links</strong>.</p><img class="trust-badge" src="https://img.shields.io/endpoint?url=https://freellmapihub.com/badge-verified.json" alt="Verified providers" height="20" loading="lazy"><a class="star-btn" href="${REPO}" target="_blank" rel="noopener"><span class="sb-label">${GH_ICON} Star on GitHub</span><span class="sb-count" data-stars>★</span></a></div>
 <div class="footer-col"><h2 class="footer-h">Explore</h2><a href="${p}#explorer">Interactive explorer</a><a href="${p}models/">Free model index</a><a href="${p}guides-and-collections/">Guides &amp; collections</a><a href="${p}programs/startups">Startup credits</a><a href="${p}programs/research">Student &amp; research credits</a></div>
 <div class="footer-col"><h2 class="footer-h">Data</h2><a href="${p}providers.json">providers.json</a><a href="${p}api/">JSON API</a><a href="${p}llms.txt">llms.txt</a></div>
-<div class="footer-col"><h2 class="footer-h">Project</h2><a href="${p}updates">Updates</a><a href="${p}changes/">What changed</a><a href="${p}state/">Monthly state report</a><a href="${REPO}/blob/main/docs/methodology.md">Methodology</a><a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a><a href="${REPO}">GitHub ★</a></div>
+<div class="footer-col"><h2 class="footer-h">Project</h2><a href="${p}updates">Updates</a><a href="${p}changes/">What changed</a><a href="${p}state/">Monthly state report</a><a href="${p}coverage/">Data coverage</a><a href="${REPO}/blob/main/docs/methodology.md">Methodology</a><a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a><a href="${REPO}">GitHub ★</a></div>
 </div><div class="wrap footer-bottom"><p>Independent, community-maintained — not affiliated with any provider listed. Terms change without notice; always confirm against each provider's own docs. MIT licensed.</p><p class="foot-legal"><a href="${p}legal/privacy">Privacy</a> · <a href="${p}legal/terms">Terms</a></p><p class="foot-email"><a href="mailto:admin@freellmapihub.com">admin@freellmapihub.com</a></p></div></footer>`;
 
 // Full page wrapper for generated (collection) pages. `p` is the path prefix to the site root.
@@ -573,7 +576,20 @@ const BEST = JSON.parse(readFileSync(join(ROOT, 'data/best.json'), 'utf8'));
 BEST.desc = expandFigures(BEST.desc, FIGS);
 BEST.intro = expandFigures(BEST.intro, FIGS);
 const bestEntries = resolveBestEntries(BEST, providers);
-// Static /compare/<a>-vs-<b>/ pages (#175): editorial picks compared pairwise
+// The /best top 10, the README table and /api/v1/best.json come from the score (lib/score.mjs), computed
+// from the data on every build at the dataset's own date, so the output is reproducible. It is never padded.
+const EDITORIAL = JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8'));
+const PROBE_REPORT = JSON.parse(readFileSync(join(ROOT, 'data/probe-report.json'), 'utf8'));
+const topList = topEntries(providers, { editorial: EDITORIAL, probeReport: PROBE_REPORT, now: new Date(data.generated + 'T12:00:00Z') });
+{
+  const bad = partnerErrors(topList);
+  if (bad.length) throw new Error(bad.join('\n'));
+}
+// The score of every eligible provider, for the /compare/ tables (static pages and the browser view).
+const rankedAll = rankProviders(providers, { editorial: EDITORIAL, probeReport: PROBE_REPORT, now: new Date(data.generated + 'T12:00:00Z'), minConfirmed: 0 });
+const scoreMap = Object.fromEntries(rankedAll
+  .map((r) => [r.slug, { total: Math.round(r.total * 10) / 10, confirmed: r.confirmed, of: r.of, rank: topList.find((e) => e.p.slug === r.slug)?.rank ?? null }]));
+// Static /compare/<a>-vs-<b>/ pages (#175): the picks of data/best.json compared pairwise
 // where they share a modality, capped (see lib/compare.mjs). Computed up front
 // so the provider pages can link to the comparisons they appear in.
 const comparePairs = compareLib.selectComparePairs(bestEntries.map((e) => e.p));
@@ -602,7 +618,7 @@ const contributorsMd = () => {
 let readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
 readme = inject(readme, 'coverage', coverageTable);
 readme = inject(readme, 'collections', collectionsIndexMd);
-readme = inject(readme, 'best', bestTable(bestEntries));
+readme = inject(readme, 'best', bestTable(topList));
 readme = inject(readme, 'contributors', contributorsMd());
 readme = injectInlineFigures(readme, FIGS);
 {
@@ -1356,7 +1372,33 @@ writeApi('programs.json', { ...apiBase, startups: programs.startups, research: p
 const historyPublic = Object.fromEntries(Object.entries(historyBySlug).map(([slug, events]) => [slug, events.map(({ changes, ...e }) => e)]));
 writeApi('history.json', { ...apiBase, description: 'Per-provider change history mined from the git log of providers.json.', history: historyPublic });
 writeApi('changes.json', { ...apiBase, description: 'Field-level provider changes (from/to), grouped by ISO week, newest first: the last 12 weeks ending at the newest change. Mined from the git log of providers.json.', weeks: changeWeeks.map(({ week, start, end, count, changes }) => ({ week, start, end, count, changes: changes.map(({ date, slug, name, field, from, to }) => ({ date, slug, name, field, from, to })) })) });
-writeApi('best.json', { ...apiBase, description: 'The editorial top 20 — hand-ranked free LLM APIs with the "why" for each pick, in rank order. Every pick carries its full verified profile.', updated: BEST.updated, count: bestEntries.length, picks: bestEntries.map(({ rank, why, tag, p }) => ({ rank, why, tag: tag || null, ...p })) });
+writeApi('best.json', { ...apiBase, description: 'The top 10 free LLM APIs by the FLLMAPIHUB score, in rank order, with the score and its parts. Never padded to ten. Every pick carries its full verified profile. Method: ' + SITE + '/best/methodology/', updated: data.generated, count: topList.length, picks: topList.map((e) => ({ rank: e.rank, podium: e.podium, score: Math.round(e.total * 10) / 10, math: Math.round(e.math * 10) / 10, editorial: Math.round(e.editorial * 10) / 10, confirmed: e.confirmed, of: e.of, parts: Object.fromEntries(Object.entries(e.parts).map(([k, v]) => [k, Math.round(v * 10) / 10])), tier_near_threshold: e.boundary, ...e.p })) });
+// /api/v1/score.json: the whole score, not only the top 10. Same numbers as best.json (one rounding rule, one source).
+const r1 = (x) => Math.round(x * 10) / 10;
+const SCORE_SCHEMA_URL = SITE + '/api/v1/score.schema.json';
+writeApi('score.json', {
+  ...apiBase,
+  description: 'The FLLMAPIHUB score of every eligible provider (verified and inside the freshness window), best first, with its parts and how many of its inputs the data confirms. Method: ' + SITE + '/best/methodology/',
+  schema: SCORE_SCHEMA_URL,
+  method: SITE + '/best/methodology/',
+  weights: { ...SCORE_WEIGHTS, editorial: EDITORIAL_WEIGHT },
+  editorial_default: EDITORIAL_DEFAULT,
+  editorial_neutral: providers.every((p) => editorialRating(EDITORIAL, p.slug) === EDITORIAL_DEFAULT),
+  min_confirmed: MIN_CONFIRMED,
+  top_size: TOP_SIZE,
+  podium_size: PODIUM_SIZE,
+  count: rankedAll.length,
+  providers: rankedAll.map((r) => {
+    const top = topList.find((e) => e.p.slug === r.slug);
+    return {
+      slug: r.slug, name: r.name, is_text_llm: r.provider.is_text_llm === true,
+      score: r1(r.total), math: r1(r.math), editorial: r1(r.editorial), confirmed: r.confirmed, of: r.of,
+      parts: Object.fromEntries(Object.entries(r.parts).map(([k, v]) => [k, r1(v)])),
+      meets_minimum: r.confirmed >= MIN_CONFIRMED, in_top: !!top, top_rank: top ? top.rank : null, tier_near_threshold: r.boundary,
+    };
+  }),
+});
+writeFileSync(join(ROOT, 'site/api/v1/score.schema.json'), readFileSync(join(ROOT, 'data/score.schema.json')));
 const API_SLICES = {
   ongoing: (p) => p.category === 'ongoing',
   trial: (p) => p.category === 'trial',
@@ -1389,6 +1431,8 @@ const apiEndpoints = {
   history: 'v1/history.json',
   changes: 'v1/changes.json',
   best: 'v1/best.json',
+  score: 'v1/score.json',
+  'score-schema': 'v1/score.schema.json',
   schema: 'v1/schema.json',
   'openai-clients': 'v1/openai-clients.json',
   litellm: 'v1/litellm.yaml',
@@ -1434,7 +1478,9 @@ const apiDocMain =
   `<h2>Everything</h2><table class="model-table"><thead><tr><th>Endpoint</th><th>Contents</th><th>Count</th></tr></thead><tbody>` +
   apiRow('Full provider dataset (all fields)', 'providers.json', publicProviders.length) +
   apiRow('Apply-to-get credit programs', 'programs.json', programs.startups.length + programs.research.length) +
-  apiRow('The editorial top 20, ranked with the "why" per pick', 'best.json', bestEntries.length) +
+  apiRow('The top 10 by score, ranked with its parts', 'best.json', topList.length) +
+  apiRow('The score of every eligible provider, with its parts', 'score.json', rankedAll.length) +
+  apiRow('JSON Schema of score.json (contract v1)', 'score.schema.json', null) +
   apiRow('Field-level provider changes by ISO week (last 12 weeks)', 'changes.json', null) +
   apiRow('Endpoint manifest', 'index.json', null) +
   apiRow('JSON Schema of the dataset (copy of data/schema.json)', 'schema.json', null) +
@@ -1503,23 +1549,33 @@ const llmsFull =
 writeFileSync(join(ROOT, 'site/llms-full.txt'), llmsFull);
 
 
-// ---------- /best — editorial top 20 page ----------
-// BEST and bestEntries are parsed and validated up front (before the README
-// injection), so the README table and this page share one source of truth.
-// Edit data/best.json to re-rank.
+// ---------- /best — the top 10 by score, with a podium of three ----------
+// topList is computed up front (lib/score.mjs) so the README table, this page and the API agree.
+// data/best.json keeps the texts of the page; its picks now only feed the static /compare/ pages.
 const bestIntroHtml = htmlEsc(BEST.intro).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-const bestItemsHtml = bestEntries.map(({ rank, p, why, tag }) => {
-  const num = String(rank).padStart(2, '0');
+const scoreTxt = (x) => x.toFixed(1);
+const bestCard = (e) => {
+  const { rank, p, podium } = e;
   const ver = p.verified
     ? '<span class="v ok">' + IC('ic-check') + ' verified ' + htmlEsc(p.last_verified) + '</span>'
     : '<span class="v warn">' + IC('ic-warn') + ' unverified</span>';
-  return '<li class="best-item"><div class="best-rank" aria-hidden="true">' + num + '</div><div class="best-body">' +
+  const note = EDITORIAL.ratings?.[p.slug]?.note;
+  const partner = podium && p.partner === true
+    ? '<p class="best-partner"><span class="best-tag">Partner</span> ' + htmlEsc(p.partner_note) + ' Being a partner adds nothing to the score.</p>'
+    : '';
+  return '<li class="best-item' + (podium ? ' best-podium best-podium-' + rank : '') + '"><div class="best-rank" aria-hidden="true">' + String(rank).padStart(2, '0') + '</div><div class="best-body">' +
     '<div class="best-head"><h2><a href="../p/' + p.slug + '">' + htmlEsc(p.name) + '</a></h2>' +
-    (tag ? '<span class="best-tag">' + htmlEsc(tag) + '</span>' : '') + '</div>' +
-    '<p class="best-why">' + htmlEsc(why) + '</p>' +
-    '<p class="best-meta">' + ver + (p.best_for ? ' <span class="sep">·</span> ' + htmlEsc(p.best_for) : '') + '</p>' +
+    '<span class="best-score" title="Out of 100">' + scoreTxt(e.total) + ' / 100</span></div>' +
+    '<p class="best-why">' + htmlEsc(p.free_tier) + '</p>' +
+    (note ? '<p class="best-editorial">' + htmlEsc(note) + '</p>' : '') +
+    partner +
+    '<p class="best-meta">' + ver + ' <span class="sep">·</span> ' + e.confirmed + ' of ' + e.of + ' inputs confirmed' +
+    (e.boundary ? ' <span class="sep">·</span> model tier near a threshold' : '') +
+    (p.best_for ? ' <span class="sep">·</span> ' + htmlEsc(p.best_for) : '') + '</p>' +
     '</div></li>';
-}).join('\n');
+};
+const podiumHtml = topList.filter((e) => e.podium).map(bestCard).join('\n');
+const restHtml = topList.filter((e) => !e.podium).map(bestCard).join('\n');
 const bestJsonld = JSON.stringify({
   '@context': 'https://schema.org',
   '@graph': [
@@ -1527,8 +1583,8 @@ const bestJsonld = JSON.stringify({
       '@type': 'ItemList',
       name: BEST.h1,
       description: BEST.desc,
-      numberOfItems: bestEntries.length,
-      itemListElement: bestEntries.map((e) => ({ '@type': 'ListItem', position: e.rank, name: e.p.name, url: SITE + '/p/' + e.p.slug })),
+      numberOfItems: topList.length,
+      itemListElement: topList.map((e) => ({ '@type': 'ListItem', position: e.rank, name: e.p.name, url: SITE + '/p/' + e.p.slug })),
     },
     {
       '@type': 'BreadcrumbList',
@@ -1546,13 +1602,63 @@ const bestMain =
   '</div></section>' +
   '<main id="main"><div class="wrap">' +
   '<p class="best-intro">' + bestIntroHtml + '</p>' +
-  '<ol class="best-list">' + bestItemsHtml + '</ol>' +
-  '<p class="count best-note">Editorial ranking, reviewed ' + htmlEsc(BEST.updated) + ' — every pick links to its full verified profile. Want to nominate a provider? See the repo.</p>' +
+  '<h2 class="best-section">The podium</h2><ol class="best-list best-podium-list">' + podiumHtml + '</ol>' +
+  (restHtml ? '<h2 class="best-section">Ranks ' + (PODIUM_SIZE + 1) + ' to ' + topList.length + '</h2><ol class="best-list" start="' + (PODIUM_SIZE + 1) + '">' + restHtml + '</ol>' : '') +
+  '<p class="count best-note">' + (topList.length < TOP_SIZE ? 'Only ' + topList.length + ' providers meet the minimum evidence today; the list is never padded to ' + TOP_SIZE + '. ' : '') +
+  'Computed from the data on ' + htmlEsc(data.generated) + ' — <a href="methodology/">how the score works</a>. Every provider links to its full verified profile.</p>' +
   '</div></main>';
 mkdirSync(join(ROOT, 'site/best'), { recursive: true });
 writeFileSync(
   join(ROOT, 'site/best/index.html'),
   htmlPage({ title: 'The best free LLM APIs · Free LLM API Hub', desc: BEST.desc, canonical: SITE + '/best/', main: bestMain, jsonld: bestJsonld, prefix: '../' })
+);
+
+// ---------- /best/methodology/ — the public method of the score ----------
+const WEIGHT_LABELS = { quality: 'Model quality', limits: 'Free limits', friction: 'No card, no phone', commercial: 'Commercial use allowed', openai: 'OpenAI-compatible endpoint', stability: 'Stability' };
+// Computed, never typed: the sentence is printed only while every provider carries the neutral default.
+const editorialNeutral = providers.every((p) => editorialRating(EDITORIAL, p.slug) === EDITORIAL_DEFAULT);
+const methodRows = MATH_INPUTS.map((k) => '<tr><td>' + WEIGHT_LABELS[k] + '</td><td class="num">' + SCORE_WEIGHTS[k] + '</td></tr>').join('') +
+  '<tr><td>Editorial rating</td><td class="num">' + EDITORIAL_WEIGHT + '</td></tr>';
+const methodMain =
+  '<section class="page-hero model-hero"><div class="wrap">' +
+  '<nav class="crumbs"><a href="../../">Home</a> / <a href="../">The best</a> / Methodology</nav>' +
+  '<h1>How the score works</h1><p class="lede">Every provider on /best gets a score from 0 to 100, computed from the data each time the site is built. Data of ' + htmlEsc(data.generated) + '.</p>' +
+  '</div></section>' +
+  '<main id="main"><div class="wrap best-method">' +
+  '<h2>The parameters and their weights</h2>' +
+  '<table class="best-weights"><thead><tr><th>Part</th><th class="num">Points</th></tr></thead><tbody>' + methodRows + '</tbody></table>' +
+  '<p>Seventy points are mathematical, from six inputs in the public dataset. Thirty points are an <strong>editorial rating</strong> per provider, shown in <a href="' + REPO + '/blob/main/data/editorial.json">data/editorial.json</a> with a public note whenever it moves more than ' + EDITORIAL_NOTE_THRESHOLD + ' points from the default of ' + EDITORIAL_DEFAULT + '. <strong>The internal rubric behind those ratings is not published.</strong></p>' +
+  (editorialNeutral ? '<p class="best-neutral"><strong>Today the editorial part is neutral.</strong> Every provider carries the same ' + EDITORIAL_DEFAULT + ' of ' + EDITORIAL_WEIGHT + ' editorial points, so it moves no position: the order is decided by the ' + (100 - EDITORIAL_WEIGHT) + ' measurable points. It stays neutral until a public rubric exists.</p>' : '') +
+  '<h2>What the rules guarantee</h2><ul>' +
+  '<li><strong>Being a partner scores nothing.</strong> The score never reads the partner flag. A partner can appear only on the podium (ranks 1 to ' + PODIUM_SIZE + '), marked with a visible “Partner” label and a public note; a partner ranked ' + (PODIUM_SIZE + 1) + ' or lower fails the build.</li>' +
+  '<li><strong>Missing information is not estimated.</strong> A figure the provider does not publish scores zero, or the middle for the two yes/no requirements. Each provider shows how many of the six inputs are confirmed.</li>' +
+  '<li><strong>Minimum evidence.</strong> Only verified providers inside the freshness window that offer text models, and with at least ' + MIN_CONFIRMED + ' of the six inputs confirmed, can enter. The list holds up to ' + TOP_SIZE + ' and is never padded.</li>' +
+  '<li><strong>The editorial part cannot outweigh the data.</strong> It can move a provider away from ' + EDITORIAL_DEFAULT + ' only by as much as its confirmed inputs allow.</li>' +
+  '<li><strong>Stability is not measured yet.</strong> It needs probes over at least ' + STABILITY_MIN_DAYS + ' days (' + STABILITY_MIN_SAMPLES + ' samples); until then it is unmeasured for everyone.</li>' +
+  '<li><strong>Deterministic.</strong> The same data gives the same order; ties break by the mathematical score, then by name.</li></ul>' +
+  '<p class="count best-note">Last data update: ' + htmlEsc(data.generated) + '. Full text and every constant: <a href="' + REPO + '/blob/main/docs/methodology.md">docs/methodology.md</a> and <a href="' + REPO + '/blob/main/scripts/lib/score.mjs">scripts/lib/score.mjs</a>.</p>' +
+  '</div></main>';
+mkdirSync(join(ROOT, 'site/best/methodology'), { recursive: true });
+writeFileSync(
+  join(ROOT, 'site/best/methodology/index.html'),
+  htmlPage({ title: 'How the score works · Free LLM API Hub', desc: 'The parameters, weights and rules behind the Free LLM API Hub top 10: what is measured, what is editorial, and that being a partner scores nothing.', canonical: SITE + '/best/methodology/', main: methodMain, prefix: '../../' })
+);
+
+// ---------- /coverage/ — what the dataset does not know yet, as a task board ----------
+const fieldCoverage = coverage(providers);
+mkdirSync(join(ROOT, 'site/coverage'), { recursive: true });
+writeFileSync(
+  join(ROOT, 'site/coverage/index.html'),
+  htmlPage({
+    title: 'Data coverage · Free LLM API Hub',
+    desc: 'What the free LLM API dataset does not know yet, field by field, with the provider docs and a prefilled issue for every open item: pick one value and add its source.',
+    canonical: SITE + '/coverage/',
+    main:
+      '<section class="page-hero model-hero"><div class="wrap"><nav class="crumbs"><a href="../">Home</a> / Data coverage</nav>' +
+      '<h1>Data coverage</h1><p class="lede">Where the data is thin, and how to add one value. Every gap links the provider\'s own docs.</p></div></section>' +
+      coverageMainHtml(fieldCoverage, { repo: REPO, generated: data.generated, prefix: '../' }),
+    prefix: '../',
+  })
 );
 
 // ---------- /compare — provider compare view (#175) ----------
@@ -1563,6 +1669,7 @@ writeFileSync(
 // current date), because the pages are gitignored and pinned in
 // derived-fingerprints.json.
 writeFileSync(join(ROOT, 'site/shared-compare.js'), compareLib.clientBundle());
+writeFileSync(join(ROOT, 'site/scores.json'), JSON.stringify({ generated: data.generated, scores: scoreMap }, null, 2) + '\n');
 rmSync(join(ROOT, 'site/compare'), { recursive: true, force: true });
 mkdirSync(join(ROOT, 'site/compare'), { recursive: true });
 const compareLinksHtml = (prefix, except = null) => suggestedPairs
@@ -1579,7 +1686,7 @@ for (const cp of comparePairs) {
     `<p class="lede">Both offer ${htmlEsc(cp.shared.join(', '))} on their free plan. Every field below comes from the dataset and is checked against each provider's own docs; <em>not confirmed</em> means nobody has confirmed that field yet — not that the answer is no.</p>` +
     `</div></section>` +
     `<main id="main"><div class="wrap prose">` +
-    compareLib.compareTableHtml([a, b], { prefix: '../../' }) +
+    compareLib.compareTableHtml([a, b], { prefix: '../../', scores: scoreMap }) +
     `<div class="prov-actions" style="margin-top:22px"><a class="btn primary" href="../?compare=${a.slug},${b.slug}">Add a provider to this comparison →</a></div>` +
     `<h2>Other comparisons</h2><nav class="colls">${compareLinksHtml('../../', cp.path)}</nav>` +
     `<p class="prov-back"><a href="../../#explorer">← All providers</a></p>` +
@@ -1641,7 +1748,9 @@ const sitemapEntries = [
   [`${SITE}/`, data.generated],
   [`${SITE}/models/`, data.generated],
   [`${SITE}/guides-and-collections/`, data.generated],
-  [`${SITE}/best/`, newest([BEST.updated])],
+  [`${SITE}/best/`, data.generated],
+  [`${SITE}/best/methodology/`, data.generated],
+  [`${SITE}/coverage/`, data.generated],
   [`${SITE}/api/`, data.generated],
   [`${SITE}/changes/`, data.generated],
   [`${SITE}/state/`, data.generated],

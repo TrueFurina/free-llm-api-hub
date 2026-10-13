@@ -11,11 +11,12 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import { bestPickErrors } from './lib/best.mjs';
+import { bestPickErrors, topEntries, partnerErrors } from './lib/best.mjs';
 import { providerFigures, figureErrors } from './lib/figures.mjs';
 import { tierForRating, nearBoundary, MODEL_TIER_MIN_VOTES } from './lib/model-tier.mjs';
 import { editorialErrors } from './lib/score.mjs';
 import { readdirSync } from 'node:fs';
+import { gpuComputeErrors } from './lib/gpu-compute.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FILE = process.argv[2] ? resolve(process.argv[2]) : join(ROOT, 'data/providers.json');
@@ -169,6 +170,14 @@ for (const p of data.providers ?? []) {
     check(URL_RE.test(p.free_limits.source || ''), `${id}: free_limits.source must be the provider's page (http/https)`);
   }
 
+  // data_policy: what the provider itself says about prompts (see docs/comparison-dimensions.md).
+  if (p.data_policy != null) {
+    const dp = p.data_policy;
+    check(dp.trains_on_prompts != null || dp.retention != null, `${id}: data_policy must state trains_on_prompts or retention (an all-null policy records nothing)`);
+    check(DATE_RE.test(dp.checked || '') && dp.checked <= data.generated, `${id}: data_policy.checked must be a date not after the dataset's generated date`);
+    check(URL_RE.test(dp.source || ''), `${id}: data_policy.source must be the provider's page (http/https)`);
+  }
+
   // no_expiry: the provider's own statement that a one-time trial credit does not expire (see docs/comparison-dimensions.md).
   if (p.no_expiry != null) {
     check(p.free_type === 'trial-credit', `${id}: no_expiry applies only to a one-time trial credit (on a continuous free tier a null expires already means no end)`);
@@ -210,6 +219,22 @@ try {
     }
   }
 } catch (e) { errors.push('programs.json: ' + e.message); }
+
+// ---------- gpu-compute.json (Free GPU compute: a section apart from the ranking) ----------
+// Skipped for fixture runs (argv[2]), like best.json: a fixture providers.json must not be failed by it.
+let gpuComputeCount = 0;
+if (!process.argv[2]) {
+  try {
+    const gpu = JSON.parse(readFileSync(join(ROOT, 'data/gpu-compute.json'), 'utf8'));
+    const gpuSchema = JSON.parse(readFileSync(join(ROOT, 'data/gpu-compute.schema.json'), 'utf8'));
+    const gpuAjv = new Ajv2020({ allErrors: true, strict: true });
+    addFormats(gpuAjv);
+    const gpuValidate = gpuAjv.compile(gpuSchema);
+    if (!gpuValidate(gpu)) for (const e of gpuValidate.errors) errors.push(`gpu-compute.json: ${e.instancePath || '/'} ${e.message}`);
+    errors.push(...gpuComputeErrors(gpu, new Set(data.providers.map((p) => p.slug))));
+    gpuComputeCount = gpu.entries.length;
+  } catch (e) { errors.push('gpu-compute.json: ' + e.message); }
+}
 
 // ---------- best.json (editorial ranking must only feature verified providers) ----------
 // The /best page and the README top-20 are the first thing visitors trust.
@@ -263,6 +288,16 @@ try {
 try {
   errors.push(...editorialErrors(JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')), data.providers));
 } catch (e) { errors.push('editorial.json: ' + e.message); }
+
+// ---------- partners (a partner may only show on the /best podium) ----------
+for (const p of data.providers ?? []) {
+  if (p.partner === true && !(typeof p.partner_note === 'string' && p.partner_note.trim())) errors.push(`${p.slug}: a partner needs a partner_note, the public note shown on the podium`);
+}
+try {
+  const editorial = JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8'));
+  const probeReport = JSON.parse(readFileSync(join(ROOT, 'data/probe-report.json'), 'utf8'));
+  errors.push(...partnerErrors(topEntries(data.providers ?? [], { editorial, probeReport, now: new Date(data.generated + 'T12:00:00Z') })));
+} catch (e) { errors.push('top 10 partner check: ' + e.message); }
 
 if (errors.length) {
   console.error(`✗ validation failed (${errors.length} issue${errors.length > 1 ? 's' : ''}):`);

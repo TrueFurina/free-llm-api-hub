@@ -4,7 +4,8 @@
 // to the data and to the shared checker in lib/best.mjs (#165).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpFile } from './lib/tmp.mjs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,10 +73,9 @@ test('/api/v1/best.json does not expose an unverified pick', () => {
     execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: ROOT, stdio: 'pipe' });
   }
   const payload = JSON.parse(readFileSync(p, 'utf8'));
-  assert.ok(payload.picks.length > 0, 'best.json should list editorial picks');
+  assert.ok(payload.picks.length > 0, 'best.json should list picks');
   for (const pick of payload.picks) {
     assert.equal(pick.verified, true, `${pick.slug}: /api/v1/best.json must not expose an unverified pick`);
-    assert.ok(pick.why && String(pick.why).trim(), `${pick.slug}: pick is missing why`);
   }
 });
 
@@ -294,4 +294,130 @@ test('a tier near a threshold is flagged and never penalised', () => {
   assert.equal(scoreProvider(near).boundary, true);
   assert.equal(scoreProvider(far).boundary, false);
   assert.equal(scoreProvider(near).total, scoreProvider(far).total, 'the flag changes nothing in the score');
+});
+
+// ---------- partners on the podium (lib/best.mjs) ----------
+import { topEntries, partnerErrors, PODIUM_SIZE } from './lib/best.mjs';
+
+test('a partner is accepted on the podium with a note and rejected below it', () => {
+  const providers = scoreData().providers;
+  const opts = { editorial: JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')), probeReport: probeData(), now: NOW };
+  const top = topEntries(providers, opts);
+  assert.ok(top.length > PODIUM_SIZE, 'the data has a top longer than the podium');
+  const mark = (slug) => providers.map((p) => (p.slug === slug ? { ...p, partner: true, partner_note: 'Sponsors the project.' } : p));
+  assert.deepEqual(partnerErrors(topEntries(mark(top[0].p.slug), opts)), [], 'a partner on rank 1 is accepted');
+  assert.deepEqual(partnerErrors(topEntries(mark(top[PODIUM_SIZE - 1].p.slug), opts)), [], 'a partner on rank 3 is accepted');
+  const below = partnerErrors(topEntries(mark(top[PODIUM_SIZE].p.slug), opts));
+  assert.equal(below.length, 1, 'a partner on rank 4 is a validation error');
+  assert.match(below[0], /only on the podium/);
+  const noNote = providers.map((p) => (p.slug === top[0].p.slug ? { ...p, partner: true } : p));
+  assert.match(partnerErrors(topEntries(noNote, opts))[0], /without a partner_note/);
+});
+
+test('being a partner leaves the order of the top identical', () => {
+  const providers = scoreData().providers;
+  const opts = { editorial: JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')), probeReport: probeData(), now: NOW };
+  const order = (ps) => topEntries(ps, opts).map((e) => [e.p.slug, e.total]);
+  const first = topEntries(providers, opts)[0].p.slug;
+  assert.deepEqual(order(providers.map((p) => (p.slug === first ? { ...p, partner: true, partner_note: 'x' } : p))), order(providers));
+});
+
+test('validate rejects a partner without its public note', () => {
+  const data = scoreData();
+  data.providers[0].partner = true;
+  const fixture = tmpFile('providers.json');
+  writeFileSync(fixture, JSON.stringify(data));
+  assert.throws(() => execFileSync(process.execPath, ['scripts/validate.mjs', fixture], { cwd: ROOT, stdio: 'pipe' }), (e) => /needs a partner_note/.test(String(e.stderr)));
+});
+
+// ---------- the editorial part is declared neutral only while it is ----------
+test('the methodology says the editorial part is neutral exactly while every rating is the default', () => {
+  const { providers } = scoreData();
+  const ed = JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8'));
+  const neutral = providers.every((p) => editorialRating(ed, p.slug) === EDITORIAL_DEFAULT);
+  execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: ROOT, stdio: 'pipe' });
+  const page = readFileSync(join(ROOT, 'site/best/methodology/index.html'), 'utf8');
+  const doc = readFileSync(join(ROOT, 'docs/methodology.md'), 'utf8');
+  assert.equal(/Today the editorial part is neutral/.test(page), neutral, 'the page states it exactly while it is true');
+  assert.equal(/The editorial part is neutral today/.test(doc), neutral, 'the document states it exactly while it is true');
+  if (neutral) assert.match(page, /15 of 30 editorial points/);
+});
+
+// ---------- /api/v1/score.json and its JSON Schema (contract v1) ----------
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
+
+const scoreApi = () => {
+  execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: ROOT, stdio: 'pipe' });
+  return JSON.parse(readFileSync(join(ROOT, 'site/api/v1/score.json'), 'utf8'));
+};
+const scoreSchema = () => JSON.parse(readFileSync(join(ROOT, 'data/score.schema.json'), 'utf8'));
+const compileScoreSchema = () => {
+  const ajv = new Ajv2020({ allErrors: true, strict: true, strictTypes: false, validateFormats: true });
+  addFormats(ajv, ['date', 'uri']);
+  return ajv.compile(scoreSchema());
+};
+
+test('score.json carries the same numbers as best.json for every pick, and lists no pick best.json does not', () => {
+  const score = scoreApi();
+  const best = JSON.parse(readFileSync(join(ROOT, 'site/api/v1/best.json'), 'utf8'));
+  const bySlug = new Map(score.providers.map((p) => [p.slug, p]));
+  for (const pick of best.picks) {
+    const p = bySlug.get(pick.slug);
+    assert.ok(p, `${pick.slug} is in score.json`);
+    for (const k of ['score', 'math', 'editorial', 'confirmed', 'of']) assert.equal(p[k], pick[k], `${pick.slug}: ${k} matches best.json`);
+    assert.deepEqual(p.parts, pick.parts, `${pick.slug}: parts match best.json`);
+    assert.equal(p.top_rank, pick.rank, `${pick.slug}: top_rank is its rank in best.json`);
+    assert.equal(p.in_top, true);
+  }
+  assert.equal(score.providers.filter((p) => p.in_top).length, best.picks.length, 'exactly the picks of best.json are in the top');
+});
+
+test('score.json validates against its schema, and a deliberately broken copy fails', () => {
+  const score = scoreApi();
+  const validate = compileScoreSchema();
+  assert.equal(validate(score), true, JSON.stringify(validate.errors));
+  const broken = (mutate) => { const c = structuredClone(score); mutate(c); return validate(c); };
+  assert.equal(broken((c) => { delete c.providers[0].score; }), false, 'a provider without its score fails');
+  assert.equal(broken((c) => { delete c.providers[0].parts; }), false, 'a provider without its parts fails');
+  assert.equal(broken((c) => { c.providers[0].top_rank = 0; }), false, 'a top_rank of 0 fails');
+  assert.equal(broken((c) => { c.providers[0].in_top = 'yes'; }), false, 'a non-boolean in_top fails');
+  assert.equal(broken((c) => { c.dataset = 'other'; }), false, 'another dataset name fails');
+  assert.equal(broken((c) => { delete c.weights.editorial; }), false, 'weights without the editorial part fail');
+  assert.equal(broken((c) => { c.providers[0].added_in_a_later_minor = 1; }), true, 'a field added within v1 does not break a v1 reader');
+});
+
+test('score.json lists every eligible provider, best first, and its schema is published at the stable URL', () => {
+  const score = scoreApi();
+  const data = scoreData();
+  const eligible = rankProviders(data.providers, { editorial: JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')), probeReport: probeData(), now: new Date(data.generated + 'T12:00:00Z'), minConfirmed: 0 });
+  assert.equal(score.count, score.providers.length);
+  assert.equal(score.count, eligible.length, 'every eligible provider is listed');
+  assert.deepEqual(score.providers.map((p) => p.slug), eligible.map((r) => r.slug), 'the order is the ranking order');
+  for (let i = 1; i < score.providers.length; i += 1) assert.ok(score.providers[i - 1].score >= score.providers[i].score, 'best score first');
+  assert.equal(score.schema, scoreSchema().$id, 'the file names its schema');
+  assert.equal(score.schema, 'https://freellmapihub.com/api/v1/score.schema.json');
+  assert.equal(readFileSync(join(ROOT, 'site/api/v1/score.schema.json'), 'utf8'), readFileSync(join(ROOT, 'data/score.schema.json'), 'utf8'), 'the published schema is the source file');
+  const index = JSON.parse(readFileSync(join(ROOT, 'site/api/v1/index.json'), 'utf8'));
+  assert.equal(index.endpoints.score, 'v1/score.json');
+  assert.equal(index.endpoints['score-schema'], 'v1/score.schema.json');
+  assert.equal(score.editorial_neutral, data.providers.every((p) => editorialRating(JSON.parse(readFileSync(join(ROOT, 'data/editorial.json'), 'utf8')), p.slug) === EDITORIAL_DEFAULT));
+});
+
+test('every field of the score schema is mentioned in docs/api.md', () => {
+  const names = new Set();
+  const walk = (o) => {
+    if (Array.isArray(o)) return o.forEach(walk);
+    if (o && typeof o === 'object') {
+      for (const [k, v] of Object.entries(o)) {
+        if (k === 'properties' && v && typeof v === 'object') Object.keys(v).forEach((n) => names.add(n));
+        walk(v);
+      }
+    }
+  };
+  walk(scoreSchema());
+  assert.ok(names.size > 20, 'the walk found the fields');
+  const doc = readFileSync(join(ROOT, 'docs/api.md'), 'utf8');
+  const missing = [...names].filter((n) => !doc.includes('`' + n + '`'));
+  assert.deepEqual(missing, [], 'fields of the schema missing in docs/api.md');
 });

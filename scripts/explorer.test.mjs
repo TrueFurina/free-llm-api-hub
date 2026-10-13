@@ -257,7 +257,8 @@ test('compare: the client view renders through the shared renderer only', () => 
   assert.match(src, /C\.parseCompareSlugs\(/, 'compare.js must parse slugs with the shared parser');
   // the only innerHTML write is the shared, escaping renderer
   const writes = src.match(/innerHTML\s*=[^;]*/g) || [];
-  assert.deepEqual(writes, ["innerHTML = C.compareTableHtml(list, { prefix: '../' })"]);
+  assert.deepEqual(writes, ['innerHTML = C.compareTableHtml(list, opts)']);
+  assert.match(src, /var opts = SCORES \? \{ prefix: '\.\.\/', scores: SCORES \} : \{ prefix: '\.\.\/' \};/, 'the options are the prefix and, when loaded, the scores map');
   assert.doesNotMatch(src, /\.name\s*\+|\+\s*p\.\w+/, 'compare.js must not concatenate provider fields into markup');
 });
 

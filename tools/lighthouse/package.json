@@ -1,0 +1,9 @@
+{
+  "name": "flah-lighthouse",
+  "private": true,
+  "description": "Lighthouse runner for the site gate. Kept apart from the root package.json so the dataset pipeline installs nothing heavy.",
+  "type": "module",
+  "devDependencies": {
+    "lighthouse": "13.5.0"
+  }
+}
