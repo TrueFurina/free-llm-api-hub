@@ -52,7 +52,7 @@ cp .env.example .env
 #    e.g. GROQ_API_KEY=... (any subset works; missing keys are skipped)
 
 # 3. Dry run first — report only, nothing written
-npm run probe
+node --env-file=.env scripts/probe.mjs
 #    you should see per-provider rows: missing-key providers skipped,
 #    present-key providers probed (auth + models + inference)
 
