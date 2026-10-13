@@ -69,13 +69,13 @@ git status          # data/providers.json + data/probe-report.json changed
 npm run build
 ```
 
-To probe a single provider at a time: `node scripts/probe.mjs --only=groq`.
-To skip inference (near-zero footprint): `node scripts/probe.mjs --auth-only`.
+To probe a single provider at a time: `node --env-file=.env scripts/probe.mjs --only=groq`.
+To skip inference (near-zero footprint): `node --env-file=.env scripts/probe.mjs --auth-only`.
 
 ## Modes & footprint
 
 ```bash
-node --env-file=.env scripts/probe.mjs      # dry run: report only, no writes
+npm run probe                     # dry run: report only, no writes
 node scripts/probe.mjs --write    # persist last_probed/probe_status/models_free + report
 node scripts/probe.mjs --auth-only   # skip inference (near-zero footprint)
 node scripts/probe.mjs --only=groq,cerebras
